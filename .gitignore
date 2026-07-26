@@ -1,0 +1,15 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Pybricks temporary files
+.ev3dev/
+
+# VS Code / IDE settings
+.vscode/
+.idea/
+
+# Operating System files
+.DS_Store
+Thumbs.db
