@@ -95,3 +95,114 @@ def detect_track_direction(robot):
 
     print("[Reflex] Track direction detected: {}".format(direction))
     return direction
+
+
+def calibrate_color_sensor(robot):
+    """
+    Interactive color sensor calibration routine on EV3 brick:
+      1. Pure White surface
+      2. Pure Black surface
+      3. Perfect Edge boundary
+    Calculates dynamic drift white & drift black intensity thresholds for 3-State and 5-State modes.
+    """
+    if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
+        print("[Calibration] Simulator mode detected. Skipping interactive calibration.")
+        return
+
+    try:
+        from pybricks.parameters import Button
+    except ImportError:
+        return
+
+    def wait_for_center_button(prompt_text):
+        print("\n==================================================")
+        print(" CALIBRATION: " + prompt_text)
+        print(" -> Place sensor, then press CENTER button")
+        print("==================================================")
+        
+        while Button.CENTER not in robot.ev3.buttons.pressed():
+            wait(100)
+        
+        try:
+            robot.ev3.speaker.beep(frequency=1000, duration=150)
+        except Exception:
+            pass
+
+        while Button.CENTER in robot.ev3.buttons.pressed():
+            wait(100)
+
+        # Average 10 readings for accuracy
+        total = 0
+        for _ in range(10):
+            total += robot.read_intensity()
+            wait(30)
+        avg_val = total / 10.0
+        print("[Calibration] Recorded Intensity: {:.1f}".format(avg_val))
+        return avg_val
+
+    print("\n==================================================")
+    print("      SENSOR INTENSITY CALIBRATION MENU           ")
+    print(" -> Press CENTER Button : Start Sensor Calibration")
+    print(" -> Press DOWN Button   : Skip Calibration (Defaults)")
+    print(" (Waiting for button press...)")
+    print("==================================================\n")
+
+    # Block execution until user explicitly presses a button
+    while True:
+        pressed = robot.ev3.buttons.pressed()
+        if Button.CENTER in pressed:
+            try:
+                robot.ev3.speaker.beep(frequency=800, duration=150)
+            except Exception:
+                pass
+            wait(500)
+            break
+        elif Button.DOWN in pressed:
+            print("[Calibration] Skipped calibration. Using default thresholds.")
+            wait(500)
+            return
+        wait(100)
+
+
+    # 1. Pure White
+    white_val = wait_for_center_button("1/3 PURE WHITE SURFACE")
+
+    # 2. Pure Black
+    black_val = wait_for_center_button("2/3 PURE BLACK SURFACE")
+
+    # 3. Perfect Edge
+    edge_val = wait_for_center_button("3/3 PERFECT EDGE BOUNDARY")
+
+    # Sanity check: ensure white > edge > black
+    if not (white_val > edge_val > black_val):
+        print("[Calibration] WARNING: Readings abnormal (White={:.1f}, Edge={:.1f}, Black={:.1f}). Using defaults.".format(
+            white_val, edge_val, black_val))
+        return
+
+    # Update base intensities in settings
+    settings.WHITE_INTENSITY = int(white_val)
+    settings.BLACK_INTENSITY = int(black_val)
+    settings.EDGE_INTENSITY = int(edge_val)
+
+    # 3-State Thresholds
+    settings.WHITE_THRESHOLD_3 = int(edge_val + (white_val - edge_val) * 0.4)
+    settings.BLACK_THRESHOLD_3 = int(black_val + (edge_val - black_val) * 0.4)
+
+    # 5-State Thresholds (calculating drift thresholds from midpoints)
+    upper_span = white_val - edge_val
+    lower_span = edge_val - black_val
+
+    settings.PURE_WHITE_THRESHOLD_5 = int(white_val - upper_span * 0.25)
+    settings.DRIFT_WHITE_THRESHOLD_5 = int(edge_val + upper_span * 0.25)
+    settings.PERFECT_EDGE_LOW_5 = int(edge_val - lower_span * 0.25)
+    settings.DRIFT_BLACK_THRESHOLD_5 = int(black_val + lower_span * 0.25)
+
+    print("\n==================================================")
+    print("      CALIBRATION COMPLETE & THRESHOLDS UPDATED   ")
+    print(" Calibrated -> White: {:.1f} | Edge: {:.1f} | Black: {:.1f}".format(white_val, edge_val, black_val))
+    print(" 3-State -> White Thresh: {}, Black Thresh: {}".format(settings.WHITE_THRESHOLD_3, settings.BLACK_THRESHOLD_3))
+    print(" 5-State -> Pure W: {}, Drift W: {}, Edge Low: {}, Drift B: {}".format(
+        settings.PURE_WHITE_THRESHOLD_5, settings.DRIFT_WHITE_THRESHOLD_5,
+        settings.PERFECT_EDGE_LOW_5, settings.DRIFT_BLACK_THRESHOLD_5))
+    print("==================================================\n")
+

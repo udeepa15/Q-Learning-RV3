@@ -35,16 +35,49 @@ class RobotInterface:
         self.sim_intensity = settings.EDGE_INTENSITY
         self.sim_ir_distance = 100
 
+        self.left_motor = None
+        self.right_motor = None
+        self.color_sensor = None
+        self.ir_sensor = None
+
         if not self.is_simulated:
             try:
                 self.ev3 = EV3Brick()
+            except Exception as e:
+                print("[RobotInterface] EV3Brick init note:", e)
+
+            # Initialize Left Motor
+            try:
                 self.left_motor = Motor(settings.PORT_LEFT_MOTOR)
+            except Exception as e:
+                print("[RobotInterface] ERROR: Left Motor failed on {}: {}".format(settings.PORT_LEFT_MOTOR, e))
+                self.is_simulated = True
+
+            # Initialize Right Motor
+            try:
                 self.right_motor = Motor(settings.PORT_RIGHT_MOTOR)
+            except Exception as e:
+                print("[RobotInterface] ERROR: Right Motor failed on {}: {}".format(settings.PORT_RIGHT_MOTOR, e))
+                self.is_simulated = True
+
+            # Initialize Color Sensor
+            try:
                 self.color_sensor = ColorSensor(settings.PORT_COLOR_SENSOR)
+            except Exception as e:
+                print("[RobotInterface] ERROR: Color Sensor failed on {}: {}".format(settings.PORT_COLOR_SENSOR, e))
+                self.is_simulated = True
+
+            # Initialize IR Sensor (Optional - fallback if unplugged)
+            try:
                 self.ir_sensor = InfraredSensor(settings.PORT_IR_SENSOR)
             except Exception as e:
-                print("[RobotInterface] Pybricks Hardware Init Failed. Falling back to Simulator:", e)
-                self.is_simulated = True
+                print("[RobotInterface] WARNING: IR Sensor on {} not connected: {}. IR obstacle reflex disabled.".format(settings.PORT_IR_SENSOR, e))
+                self.ir_sensor = None
+
+            if self.is_simulated:
+                print("[RobotInterface] Required hardware missing. Falling back to Simulator Mode.")
+            else:
+                print("[RobotInterface] Real EV3 Hardware successfully connected and ready!")
         else:
             print("[RobotInterface] Running in PC Simulator Mode.")
 
@@ -52,7 +85,7 @@ class RobotInterface:
         """
         Reads reflection intensity from the color sensor (0 - 100).
         """
-        if self.is_simulated:
+        if self.is_simulated or self.color_sensor is None:
             return self.sim_intensity
         return self.color_sensor.reflection()
 
@@ -60,9 +93,10 @@ class RobotInterface:
         """
         Reads distance percentage / cm from the IR sensor.
         """
-        if self.is_simulated:
+        if self.is_simulated or self.ir_sensor is None:
             return self.sim_ir_distance
         return self.ir_sensor.distance()
+
 
     def execute_action(self, action_id):
         """

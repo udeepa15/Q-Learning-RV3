@@ -1,3 +1,4 @@
+#!/usr/bin/env pybricks-micropython
 """
 Evaluation / Final Exam Script for EV3 Q-Learning Line Follower Agent.
 """
@@ -5,9 +6,14 @@ Evaluation / Final Exam Script for EV3 Q-Learning Line Follower Agent.
 import sys
 import os
 
-# Ensure project root is in sys.path for clean imports
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
+# Ensure project root is in sys.path (MicroPython os.path fallback)
+try:
+    import os.path
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+except (ImportError, AttributeError, NameError):
+    current_dir = "."
+
+if current_dir and current_dir not in sys.path:
     sys.path.append(current_dir)
 
 try:
@@ -22,6 +28,15 @@ from hardware.robot import RobotInterface
 from hardware.reflexes import detect_track_direction, hardcoded_obstacle_avoidance
 from core.agent import QLearningAgent
 from core.environment import Environment
+
+
+def file_exists(filename):
+    """MicroPython safe file existence check."""
+    try:
+        os.stat(filename)
+        return True
+    except Exception:
+        return False
 
 
 def evaluate_agent(max_iterations=None, use_simulator=False):
@@ -40,22 +55,24 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     direction = detect_track_direction(robot)
     print("[Evaluate] Direction detected:", direction)
 
-    # Determine Q-table file to load based on detected direction
+    # Determine Q-table file to load based on detected direction and STATE_MODE
+    state_mode = getattr(settings, 'STATE_MODE', 5)
     if direction == "CW":
-        model_filename = "models/cw_q_table.pkl"
-        fallback_filename = "cw_q_table.pkl"
+        model_filename = "models/cw_q_table_{}state.pkl".format(state_mode)
+        fallback_filename = "models/cw_q_table.pkl"
     else:
-        model_filename = "models/ccw_q_table.pkl"
-        fallback_filename = "ccw_q_table.pkl"
+        model_filename = "models/ccw_q_table_{}state.pkl".format(state_mode)
+        fallback_filename = "models/ccw_q_table.pkl"
+
 
     # Select existing file path
-    if os.path.exists(model_filename):
+    if file_exists(model_filename):
         load_path = model_filename
-    elif os.path.exists(fallback_filename):
+    elif file_exists(fallback_filename):
         load_path = fallback_filename
     else:
-        # If neither exists, attempt to load model_filename (which will print error/raise if missing)
         load_path = model_filename
+
 
     try:
         agent.load(load_path)

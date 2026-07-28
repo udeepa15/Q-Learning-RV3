@@ -1,24 +1,27 @@
+#!/usr/bin/env pybricks-micropython
 """
 Configuration and Hyperparameters for EV3 Pybricks Q-Learning Project.
 """
+
 
 # Pybricks parameters port imports if available
 try:
     from pybricks.parameters import Port
     PORT_LEFT_MOTOR = Port.B
     PORT_RIGHT_MOTOR = Port.C
-    PORT_COLOR_SENSOR = Port.S1
-    PORT_IR_SENSOR = Port.S4
+    PORT_COLOR_SENSOR = Port.S2
+    PORT_IR_SENSOR = Port.S3
 except ImportError:
     # PC Fallback port representations
     PORT_LEFT_MOTOR = "Port.B"
     PORT_RIGHT_MOTOR = "Port.C"
-    PORT_COLOR_SENSOR = "Port.S1"
-    PORT_IR_SENSOR = "Port.S4"
+    PORT_COLOR_SENSOR = "Port.S2"
+    PORT_IR_SENSOR = "Port.S3"
 
 # Reinforcement Learning Hyperparameters
 ALPHA = 0.4            # Learning rate
 GAMMA = 0.7            # Discount factor
+
 EPSILON_START = 0.3    # Initial exploration rate
 EPSILON_DECAY = 0.97   # Exploration decay per episode
 EPSILON_MIN = 0.01     # Minimum exploration rate
@@ -61,13 +64,14 @@ NUM_STATES = STATE_MODE + 1
 
 # Action Speed Tuples (Left Motor Speed, Right Motor Speed) in deg/s
 ACTION_SPEEDS = {
-    ACTION_FORWARD:      (150, 150),
-    ACTION_SLIGHT_LEFT:   (80, 150),
-    ACTION_SHARP_LEFT:   (-80, 150),
-    ACTION_SLIGHT_RIGHT: (150, 80),
-    ACTION_SHARP_RIGHT:  (150, -80),
-    ACTION_REVERSE:      (-100, -100),
+    ACTION_FORWARD:      (160, 160),
+    ACTION_SLIGHT_LEFT:   (-30, 160),
+    ACTION_SHARP_LEFT:   (-150, 180),    # Increased counter-rotation for sharp left turns
+    ACTION_SLIGHT_RIGHT: (160, -30),
+    ACTION_SHARP_RIGHT:  (180, -150),   # Increased counter-rotation for sharp right turns
+    ACTION_REVERSE:      (-120, -120),
 }
+
 
 # Non-RL Reflex / Hardware Parameters
 OBSTACLE_DISTANCE_THRESHOLD = 20  # cm / percentage distance threshold for IR sensor
