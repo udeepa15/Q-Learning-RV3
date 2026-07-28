@@ -25,7 +25,8 @@ except ImportError:
 
 from config import settings
 from hardware.robot import RobotInterface
-from hardware.reflexes import detect_track_direction, hardcoded_obstacle_avoidance
+from hardware.reflexes import hardcoded_obstacle_avoidance
+
 from core.agent import QLearningAgent
 from core.environment import Environment
 
@@ -51,27 +52,18 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     print("Starting EV3 Robot Evaluation...")
     print("==================================================")
 
-    # RULE C: Sweep and detect track direction
-    direction = detect_track_direction(robot)
-    print("[Evaluate] Direction detected:", direction)
+    model_filename = "models/cw_q_table_8state.pkl"
 
-    # Determine Q-table file to load based on detected direction and STATE_MODE
-    state_mode = getattr(settings, 'STATE_MODE', 5)
-    if direction == "CW":
-        model_filename = "models/cw_q_table_{}state.pkl".format(state_mode)
-        fallback_filename = "models/cw_q_table.pkl"
-    else:
-        model_filename = "models/ccw_q_table_{}state.pkl".format(state_mode)
-        fallback_filename = "models/ccw_q_table.pkl"
+    fallback_filename = "models/cw_q_table.pkl"
 
-
-    # Select existing file path
     if file_exists(model_filename):
         load_path = model_filename
     elif file_exists(fallback_filename):
         load_path = fallback_filename
     else:
         load_path = model_filename
+
+
 
 
     try:

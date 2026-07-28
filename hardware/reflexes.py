@@ -17,9 +17,12 @@ except ImportError:
 
 def is_on_edge(intensity):
     """
-    Helper function to check if reflection intensity is within the edge gradient range.
+    Helper function to check if reflection intensity is within the perfect edge gradient range.
     """
-    return settings.BLACK_THRESHOLD < intensity < settings.WHITE_THRESHOLD
+    edge_low = getattr(settings, 'PERFECT_EDGE_LOW_8', 14)
+    edge_high = getattr(settings, 'MICRO_DRIFT_WHITE_THRESH_8', 18)
+    return edge_low <= intensity <= edge_high
+
 
 
 def hardcoded_obstacle_avoidance(robot):
@@ -184,25 +187,58 @@ def calibrate_color_sensor(robot):
     settings.BLACK_INTENSITY = int(black_val)
     settings.EDGE_INTENSITY = int(edge_val)
 
-    # 3-State Thresholds
-    settings.WHITE_THRESHOLD_3 = int(edge_val + (white_val - edge_val) * 0.4)
-    settings.BLACK_THRESHOLD_3 = int(black_val + (edge_val - black_val) * 0.4)
+    # Proportionally lower TOTALLY_LOST_THRESHOLD so normal black doesn't trigger lost state
+    settings.TOTALLY_LOST_THRESHOLD = max(1, int(black_val * 0.4))
 
-    # 5-State Thresholds (calculating drift thresholds from midpoints)
-    upper_span = white_val - edge_val
-    lower_span = edge_val - black_val
+    # 8-State Thresholds (With wide Edge Deadband zone to eliminate penguin waddling)
+    deadband_offset = max(3, int((white_val - black_val) * 0.12))
+    settings.PERFECT_EDGE_HIGH_8 = int(edge_val + deadband_offset)
+    settings.PERFECT_EDGE_LOW_8  = int(edge_val - deadband_offset)
 
-    settings.PURE_WHITE_THRESHOLD_5 = int(white_val - upper_span * 0.25)
-    settings.DRIFT_WHITE_THRESHOLD_5 = int(edge_val + upper_span * 0.25)
-    settings.PERFECT_EDGE_LOW_5 = int(edge_val - lower_span * 0.25)
-    settings.DRIFT_BLACK_THRESHOLD_5 = int(black_val + lower_span * 0.25)
+    upper_span = white_val - settings.PERFECT_EDGE_HIGH_8
+    lower_span = settings.PERFECT_EDGE_LOW_8 - black_val
+
+    step_w = upper_span / 3.0
+    settings.MICRO_DRIFT_WHITE_THRESH_8  = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 1)
+    settings.LIGHT_DRIFT_WHITE_THRESH_8  = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 2)
+    settings.PURE_WHITE_THRESHOLD_8      = int(white_val - step_w * 0.3)
+
+    settings.DRIFT_BLACK_THRESHOLD_8   = int(black_val + lower_span * 0.4)
 
     print("\n==================================================")
     print("      CALIBRATION COMPLETE & THRESHOLDS UPDATED   ")
-    print(" Calibrated -> White: {:.1f} | Edge: {:.1f} | Black: {:.1f}".format(white_val, edge_val, black_val))
-    print(" 3-State -> White Thresh: {}, Black Thresh: {}".format(settings.WHITE_THRESHOLD_3, settings.BLACK_THRESHOLD_3))
-    print(" 5-State -> Pure W: {}, Drift W: {}, Edge Low: {}, Drift B: {}".format(
-        settings.PURE_WHITE_THRESHOLD_5, settings.DRIFT_WHITE_THRESHOLD_5,
-        settings.PERFECT_EDGE_LOW_5, settings.DRIFT_BLACK_THRESHOLD_5))
+    print("==================================================")
+    print(" Raw Surface Intensity Readings:")
+    print("   -> Pure White Surface : {:.1f}".format(white_val))
+    print("   -> Perfect Edge Line  : {:.1f}".format(edge_val))
+    print("   -> Pure Black Surface : {:.1f}".format(black_val))
+    print("--------------------------------------------------")
+    print(" Computed 8-State Intensity Thresholds:")
+    print("   -> State 0 (Pure White)   : Intensity >= {}".format(settings.PURE_WHITE_THRESHOLD_8))
+    print("   -> State 1 (Light Drift)  : {} <= Intensity < {}".format(settings.LIGHT_DRIFT_WHITE_THRESH_8, settings.PURE_WHITE_THRESHOLD_8))
+    print("   -> State 2 (Micro Drift)  : {} <= Intensity < {}".format(settings.MICRO_DRIFT_WHITE_THRESH_8, settings.LIGHT_DRIFT_WHITE_THRESH_8))
+    print("   -> State 3 (Near Edge)    : {} <= Intensity < {}".format(settings.PERFECT_EDGE_HIGH_8, settings.MICRO_DRIFT_WHITE_THRESH_8))
+    print("   -> State 4 (PERFECT EDGE) : {} <= Intensity < {} [WIDE FORWARD DEADBAND]".format(settings.PERFECT_EDGE_LOW_8, settings.PERFECT_EDGE_HIGH_8))
+    print("   -> State 5 (Drift Black)  : {} <= Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8, settings.PERFECT_EDGE_LOW_8))
+    print("   -> State 6 (Pure Black)   : Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8))
+    print("   -> State 7 (Totally Lost) : Intensity < {} (for {} steps)".format(settings.TOTALLY_LOST_THRESHOLD, settings.TOTALLY_LOST_CONSECUTIVE_STEPS))
+    print("==================================================")
+    print(" -> PRESS CENTER BUTTON TO CONFIRM & START TRAINING")
     print("==================================================\n")
+
+
+
+    # Hold execution until user presses CENTER button
+    while True:
+        pressed = robot.ev3.buttons.pressed()
+        if Button.CENTER in pressed:
+            try:
+                robot.ev3.speaker.beep(frequency=1200, duration=200)
+            except Exception:
+                pass
+            wait(500)
+            break
+        wait(100)
+
+
 

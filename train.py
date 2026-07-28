@@ -26,10 +26,9 @@ except ImportError:
 
 from config import settings
 from hardware.robot import RobotInterface
-from hardware.reflexes import hardcoded_obstacle_avoidance, detect_track_direction, calibrate_color_sensor
+from hardware.reflexes import hardcoded_obstacle_avoidance, calibrate_color_sensor
 from core.agent import QLearningAgent
-from core.environment import Environment, STATE_TOTALLY_LOST, STATE_TOTALLY_LOST_5
-
+from core.environment import Environment, STATE_TOTALLY_LOST
 
 
 def file_exists(filename):
@@ -41,126 +40,96 @@ def file_exists(filename):
         return False
 
 
-def select_training_configuration(robot):
+def select_model_initialization(robot, save_path, force_fresh=False):
     """
-    Allows user to select State Mode (3 or 5) and Direction (CW or CCW) via EV3 buttons:
-      Step 1: State Mode
-        - Press UP Button    : 3-State Mode
-        - Press DOWN Button  : 5-State Mode
-      Step 2: Direction
-        - Press LEFT Button  : CCW Mode
-        - Press RIGHT Button : CW Mode
-        - Press CENTER Button: Auto-Detect via Sweep
+    Prompts the user on EV3 brick before training starts:
+      - UP Button   : Continue training previously saved Q-table
+      - DOWN Button : Restart fresh from hardcoded heuristic table
     """
-    default_mode = getattr(settings, 'STATE_MODE', 5)
+    if force_fresh or not file_exists(save_path):
+        print("[Train] No previously saved Q-table found at {}. Initializing fresh from hardcoded heuristic table.".format(save_path))
+        return False  # False = start fresh from heuristic table
+
     if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
-        print("[Train] Simulator mode. Defaulting to State Mode {}, CW direction.".format(default_mode))
-        return default_mode, "CW"
+        print("[Train] Simulator mode. Defaulting to continuing previous saved model: {}".format(save_path))
+        return True
 
     try:
         from pybricks.parameters import Button
     except ImportError:
-        return default_mode, "CW"
+        return True
 
-    # Step 1: State Mode Selection (Blocks until UP or DOWN is pressed)
     print("\n==================================================")
-    print("        STEP 1: SELECT STATE ARCHITECTURE         ")
-    print(" -> Press UP Button   : 3-State Mode")
-    print(" -> Press DOWN Button : 5-State Mode")
+    print("        Q-TABLE INITIALIZATION MENU               ")
+    print("==================================================")
+    print(" Previously saved model detected: {}".format(save_path))
+    print(" -> Press UP Button   : CONTINUE Training Previous Saved Model")
+    print(" -> Press DOWN Button : RESTART Fresh (Hardcoded Heuristic Table)")
     print(" (Waiting for button press...)")
     print("==================================================\n")
 
-    selected_mode = None
     while True:
         pressed = robot.ev3.buttons.pressed()
         if Button.UP in pressed:
-            selected_mode = 3
-            print("[Train] Button Pressed: UP -> Selected 3-State Architecture.")
+            try:
+                robot.ev3.speaker.beep(frequency=1000, duration=150)
+            except Exception:
+                pass
+            print("[Train] Button Pressed: UP -> Continuing training previous saved model.")
             wait(500)
-            break
+            return True
         elif Button.DOWN in pressed:
-            selected_mode = 5
-            print("[Train] Button Pressed: DOWN -> Selected 5-State Architecture.")
+            try:
+                robot.ev3.speaker.beep(frequency=600, duration=150)
+            except Exception:
+                pass
+            print("[Train] Button Pressed: DOWN -> Restarting fresh from hardcoded heuristic table.")
             wait(500)
-            break
+            return False
         wait(100)
 
-    # Step 2: Direction Selection (Blocks until LEFT, RIGHT, or CENTER is pressed)
-    print("\n==================================================")
-    print("        STEP 2: SELECT TRACK DIRECTION            ")
-    print(" -> Press LEFT Button   : Train CCW (Counter-Clockwise)")
-    print(" -> Press RIGHT Button  : Train CW  (Clockwise)")
-    print(" -> Press CENTER Button : Auto-Detect via Sweep")
-    print(" (Waiting for button press...)")
-    print("==================================================\n")
 
-    selected_dir = None
-    while True:
-        pressed = robot.ev3.buttons.pressed()
-        if Button.LEFT in pressed:
-            selected_dir = "CCW"
-            print("[Train] Button Pressed: LEFT -> Selected CCW Mode.")
-            wait(500)
-            break
-        elif Button.RIGHT in pressed:
-            selected_dir = "CW"
-            print("[Train] Button Pressed: RIGHT -> Selected CW Mode.")
-            wait(500)
-            break
-        elif Button.CENTER in pressed:
-            print("[Train] Button Pressed: CENTER -> Running Auto-Detect Sweep...")
-            selected_dir = detect_track_direction(robot)
-            break
-        wait(100)
+def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_simulator=False, force_fresh=False):
 
-    # Sync settings.STATE_MODE
-    settings.STATE_MODE = selected_mode
-
-    return selected_mode, selected_dir
-
-
-
-def train_agent(num_episodes=10, max_steps_per_episode=100, save_path=None, use_simulator=False, force_fresh=False):
     """
-    Main RL Training loop for Q-Learning line follower.
-    Supports interactive sensor calibration, incremental retraining of existing Q-tables, and logging to CSV.
+    Main RL Training loop for 5-State Q-Learning line follower.
+    Supports interactive sensor calibration, model initialization prompt, retraining, and CSV metrics logging.
     """
     robot = RobotInterface(use_simulator=use_simulator)
 
     # 1. Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge)
     calibrate_color_sensor(robot)
-
-    # 2. Determine State Mode (3 vs 5) and Direction (CW vs CCW) via EV3 buttons
-    state_mode, direction = select_training_configuration(robot)
-
     
     if save_path is None:
-        save_path = "models/{}_q_table_{}state.pkl".format(direction.lower(), state_mode)
+        save_path = "models/cw_q_table_8state.pkl"
 
-    agent = QLearningAgent(state_mode=state_mode, direction=direction, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
+
+    agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
     env = Environment()
 
-
-    # 2. Retraining Logic: Load existing Q-table if available
-    if not force_fresh and file_exists(save_path):
+    # 2. Retraining vs Fresh Start Prompt Menu
+    use_saved_model = select_model_initialization(robot, save_path, force_fresh=force_fresh)
+    if use_saved_model:
         try:
             agent.load(save_path)
-            print("[Train] RETRAINING MODE: Loaded existing Q-table from {}. Continuing learning...".format(save_path))
+            print("[Train] RETRAINING MODE: Successfully loaded existing Q-table from {}.".format(save_path))
         except Exception as e:
-            print("[Train] Could not load existing Q-table ({}). Starting with heuristic table.".format(e))
+            print("[Train] Could not load saved Q-table ({}). Initializing with heuristic table.".format(e))
     else:
-        print("[Train] FRESH START MODE: Initializing agent with heuristic Q-values.")
+        print("[Train] FRESH START MODE: Initialized agent with hardcoded heuristic Q-values.")
 
     epsilon = settings.EPSILON_START
     metrics_log = []
 
     print("==================================================")
-    print("Starting Q-Learning Training [Dir: {}, State Mode: {}]...".format(direction, state_mode))
+    print("Starting Q-Learning Training (5-State Clockwise Mode)...")
     print("Episodes: {}, Max Steps/Episode: {}".format(num_episodes, max_steps_per_episode))
     print("Target Q-Table File: {}".format(save_path))
     print("==================================================")
 
-    lost_state_id = STATE_TOTALLY_LOST if state_mode == 3 else STATE_TOTALLY_LOST_5
+    lost_state_id = STATE_TOTALLY_LOST
+
+
 
     for episode in range(1, num_episodes + 1):
         env.reset()
@@ -237,7 +206,9 @@ def train_agent(num_episodes=10, max_steps_per_episode=100, save_path=None, use_
     print("Training finished successfully. Saved updated Q-table to:", save_path)
 
     # Write metrics to CSV (MicroPython compatible file writer)
-    csv_filename = "training_metrics_{}_{}state.csv".format(direction.lower(), state_mode)
+    csv_filename = "training_metrics_cw_5state.csv"
+
+
     try:
         with open(csv_filename, 'w') as f:
             f.write("episode,hard_corrections,lap_completed,total_reward\n")
@@ -252,4 +223,5 @@ def train_agent(num_episodes=10, max_steps_per_episode=100, save_path=None, use_
 
 if __name__ == "__main__":
     target_file = sys.argv[1] if len(sys.argv) > 1 else None
-    train_agent(num_episodes=15, max_steps_per_episode=60, save_path=target_file)
+    train_agent(num_episodes=40, max_steps_per_episode=60, save_path=target_file)
+

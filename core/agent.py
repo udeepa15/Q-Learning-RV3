@@ -19,63 +19,35 @@ except ImportError:
 class QLearningAgent:
     """
     Q-Learning Agent implemented in pure Python (no numpy dependency).
-    Supports Heuristic Initialization for 3-State and 5-State architectures in CW & CCW directions.
+    Supports 5-State Heuristic Initialization for Clockwise line following.
     """
-    def __init__(self, state_mode=None, direction="CW", n_states=None, n_actions=settings.NUM_ACTIONS,
+    def __init__(self, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
                  alpha=settings.ALPHA, gamma=settings.GAMMA):
-        self.state_mode = state_mode if state_mode is not None else getattr(settings, 'STATE_MODE', 5)
-        self.direction = direction.upper() if direction else "CW"
-        self.n_states = n_states if n_states is not None else (self.state_mode + 1)
+        self.n_states = n_states
         self.n_actions = n_actions
         self.alpha = alpha
         self.gamma = gamma
 
-        # Initialize Q-table matrix with directional heuristic values
+        # Initialize Q-table matrix with 5-State heuristic values
         self.q_table = self._initialize_q_table()
 
     def _initialize_q_table(self):  
         """
-        Injects heuristic initial Q-values to guide early exploration for CW and CCW directions.
+        Injects empirical initial Q-values for 8-State, 8-Action Clockwise line following:
+        Actions: [FWD, M_LFT, S_LFT, SH_LFT, M_RGT, S_RGT, SH_RGT, REV]
         """
-        if self.state_mode == 3:
-            if self.direction == "CCW":
-                return [
-                    [0.0, 2.0, 2.0, -5.0, -5.0, 0.0],   # Row 0: Too White -> Turn Left
-                    [5.0, 0.0, -2.0, 0.0, -2.0, -5.0],  # Row 1: Edge -> FWD
-                    [0.0, -5.0, -5.0, 2.0, 2.0, 0.0],   # Row 2: Too Black -> Turn Right
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 5.0]      # Row 3: IR / Lost -> REV
-                ]
-            else:  # CW
-                return [
-                    [0.0, -5.0, -5.0, 2.0, 2.0, 0.0],   # Row 0: Too White -> Turn Right
-                    [5.0, 0.0, -2.0, 0.0, -2.0, -5.0],  # Row 1: Edge -> FWD
-                    [0.0, 2.0, 2.0, -5.0, -5.0, 0.0],   # Row 2: Too Black -> Turn Left
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 5.0]      # Row 3: IR / Lost -> REV
-                ]
-        elif self.state_mode == 5:
-            if self.direction == "CCW":
-                return [
-                    [-2.0, 0.0, 5.0, -5.0, -5.0, -1.0],  # Row 0: Pure White -> Sharp LFT
-                    [2.0, 3.0, 0.0, -2.0, -5.0, -2.0],   # Row 1: Drift White -> Slight LFT
-                    [5.0, 0.0, -2.0, 0.0, -2.0, -5.0],   # Row 2: Edge -> FWD
-                    [2.0, -2.0, -5.0, 3.0, 0.0, -2.0],   # Row 3: Drift Black -> Slight RGT
-                    [-2.0, -5.0, -5.0, 0.0, 5.0, -1.0],  # Row 4: Pure Black -> Sharp RGT
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 5.0]       # Row 5: IR / Lost -> REV
-                ]
-            else:  # CW
-                return [
-                    [-2.0, -5.0, -5.0, 0.0, 5.0, -1.0],  # Row 0: Pure White -> Sharp RGT
-                    [2.0, -2.0, -5.0, 3.0, 0.0, -2.0],   # Row 1: Drift White -> Slight RGT
-                    [5.0, 0.0, -2.0, 0.0, -2.0, -5.0],   # Row 2: Edge -> FWD
-                    [2.0, 3.0, 0.0, -2.0, -5.0, -2.0],   # Row 3: Drift Black -> Slight LFT
-                    [-2.0, 0.0, 5.0, -5.0, -5.0, -1.0],  # Row 4: Pure Black -> Sharp LFT
-                    [0.0, 0.0, 0.0, 0.0, 0.0, 5.0]       # Row 5: IR / Lost -> REV
-                ]
-        else:
-            return [[0.0 for _ in range(self.n_actions)] for _ in range(self.n_states)]
+        return [
+            [ 1.6,  3.5,  8.3, 10.1,  2.5,  3.4,  2.2,  1.6],  # Row 0: Pure White   -> Sharp LFT (10.1*)
+            [ 3.4,  5.3, 10.8,  6.0,  1.6, -2.7, -0.9,  1.8],  # Row 1: Medium Drift -> Slight LFT (10.8*)
+            [ 3.7, 11.7,  8.2,  2.3,  1.3, -2.5, -3.1, -0.7],  # Row 2: Light Drift  -> Micro LFT (11.7*)
+            [12.1, 13.7, 11.5,  6.9,  6.0,  1.7,  1.2,  6.2],  # Row 3: Micro Drift  -> Micro LFT (13.7*)
+            [16.0,  9.0,  9.5,  9.7, 10.0, 10.5,  7.2,  6.2],  # Row 4: Perfect Edge -> Drive FWD (16.0*)
+            [ 5.9,  2.1,  5.5,  2.5, 12.5, 11.1,  8.5,  4.6],  # Row 5: Drift Black  -> Micro RGT (12.5*)
+            [ 4.1,  3.3,  3.4,  4.0,  4.0, 10.0, 10.9,  3.6],  # Row 6: Pure Black   -> Sharp RGT (10.9*)
+            [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0, 10.0]   # Row 7: Lost / IR    -> Reverse (10.0*)
+        ]
 
     def choose_action(self, state, epsilon):
-
         """
         Epsilon-greedy action selection.
         """
@@ -130,12 +102,12 @@ class QLearningAgent:
         Prints a dynamic, formatted ASCII snapshot of the Q-table in the terminal.
         Asterisk (*) indicates the current optimal action per state.
         """
-        action_names = ["FWD", "S_LFT", "SH_LFT", "S_RGT", "SH_RGT", "REV"]
-        
-        if self.state_mode == 3:
-            state_names = ["Too White  ", "Edge       ", "Too Black  ", "Lost/IR    "]
-        else:
-            state_names = ["Pure White ", "Drift White", "Edge       ", "Drift Black", "Pure Black ", "Lost/IR    "]
+        action_names = ["FWD", "M_LFT", "S_LFT", "SH_LFT", "M_RGT", "S_RGT", "SH_RGT", "REV"]
+        state_names = [
+            "Pure White  ", "Med Drift W ", "Lt Drift W  ", "Micro DriftW",
+            "Edge        ", "Drift Black ", "Pure Black  ", "Lost/IR     "
+        ]
+
 
         print("\n----------------------- DYNAMIC Q-TABLE SNAPSHOT -----------------------")
         header = "State        | " + " | ".join("{:>7}".format(a) for a in action_names)
@@ -153,4 +125,5 @@ class QLearningAgent:
                     formatted_vals.append("{:>7.1f}".format(q_val))
             print("{:<12} | ".format(s_name) + " | ".join(formatted_vals))
         print("------------------------------------------------------------------------\n")
+
 
