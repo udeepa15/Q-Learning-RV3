@@ -36,10 +36,10 @@ EDGE_INTENSITY = 14
 PURE_WHITE_THRESHOLD_8       = 32  # State 0: Pure White (>= 32)
 MEDIUM_DRIFT_WHITE_THRESH_8  = 28  # State 1: Medium Drift (28 - 32)
 LIGHT_DRIFT_WHITE_THRESH_8   = 25  # State 2: Light Drift (25 - 28)
-MICRO_DRIFT_WHITE_THRESH_8   = 22  # State 3: Micro Drift (22 - 25)
-PERFECT_EDGE_HIGH_8          = 18  # State 4: Edge High Bound (22)
-PERFECT_EDGE_LOW_8           = 12  # State 4: Edge Low Bound (14) -> Wide Deadband (14 - 22)!
-DRIFT_BLACK_THRESHOLD_8      = 9   # State 5: Drift Black (9 - 14)
+                                   # State 3: Micro Drift (18 - 25)
+PERFECT_EDGE_HIGH_8          = 18  # State 4: Edge High Bound
+PERFECT_EDGE_LOW_8           = 12  # State 4: Edge Low Bound -> Deadband (12 - 18)
+DRIFT_BLACK_THRESHOLD_8      = 9   # State 5: Drift Black (9 - 12)
                                    # State 6: Pure Black (< 9)
 
 
@@ -75,7 +75,7 @@ INVERT_TURNS = (TURN_DIRECTION == "CCW")
 
 # Dynamic Speed Multipliers derived from BASE_SPEED
 FORWARD_SPEED      = BASE_SPEED
-MICRO_INNER_SPEED  = int(BASE_SPEED * 0.15)   # e.g., 212 deg/s (gentle micro turn)
+MICRO_INNER_SPEED  = int(BASE_SPEED * 0.15)   # e.g., 37 deg/s (gentle micro turn)
 SLIGHT_OUTER_SPEED = BASE_SPEED
 SLIGHT_INNER_SPEED = int(BASE_SPEED * 0.35)   # e.g., 87 deg/s (slight turn)
 SHARP_OUTER_SPEED  = BASE_SPEED
@@ -116,4 +116,4 @@ ACTION_SPEEDS = {
 
 # Non-RL Reflex / Hardware Parameters
 OBSTACLE_DISTANCE_THRESHOLD = 20  # cm / percentage distance threshold for IR sensor
-DEFAULT_STEP_TIME_MS = 20         # Action execution duration (80ms = 12.5Hz fast control loop)
+DEFAULT_STEP_TIME_MS = 20         # Action execution duration (20ms = 50Hz fast control loop)

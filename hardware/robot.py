@@ -100,7 +100,7 @@ class RobotInterface:
 
     def execute_action(self, action_id):
         """
-        Executes a 6-action motor command.
+        Executes an 8-action motor command.
         """
         if action_id not in settings.ACTION_SPEEDS:
             raise ValueError("Invalid action_id: {}".format(action_id))

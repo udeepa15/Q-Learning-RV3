@@ -38,20 +38,17 @@ class Environment:
         if self.consecutive_lost_count >= settings.TOTALLY_LOST_CONSECUTIVE_STEPS:
             return STATE_TOTALLY_LOST
 
-        edge_low  = getattr(settings, 'PERFECT_EDGE_LOW_8', 12)
-        edge_high = getattr(settings, 'PERFECT_EDGE_HIGH_8', 16)
-
-        if intensity >= getattr(settings, 'PURE_WHITE_THRESHOLD_8', 32):
+        if intensity >= settings.PURE_WHITE_THRESHOLD_8:
             return STATE_PURE_WHITE
-        elif intensity >= getattr(settings, 'MEDIUM_DRIFT_WHITE_THRESH_8', 28):
+        elif intensity >= settings.MEDIUM_DRIFT_WHITE_THRESH_8:
             return STATE_MEDIUM_DRIFT_WHITE
-        elif intensity >= getattr(settings, 'LIGHT_DRIFT_WHITE_THRESH_8', 25):
+        elif intensity >= settings.LIGHT_DRIFT_WHITE_THRESH_8:
             return STATE_LIGHT_DRIFT_WHITE
-        elif intensity >= edge_high:
+        elif intensity >= settings.PERFECT_EDGE_HIGH_8:
             return STATE_MICRO_DRIFT_WHITE
-        elif intensity >= edge_low:
-            return STATE_PERFECT_EDGE  # Wide Deadband Range (14 - 22)!
-        elif intensity >= getattr(settings, 'DRIFT_BLACK_THRESHOLD_8', 9):
+        elif intensity >= settings.PERFECT_EDGE_LOW_8:
+            return STATE_PERFECT_EDGE  # Edge Deadband Range (12 - 18)
+        elif intensity >= settings.DRIFT_BLACK_THRESHOLD_8:
             return STATE_DRIFT_BLACK
         else:
             return STATE_PURE_BLACK

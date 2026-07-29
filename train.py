@@ -92,7 +92,7 @@ def select_model_initialization(robot, save_path, force_fresh=False):
 def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_simulator=False, force_fresh=False):
 
     """
-    Main RL Training loop for 5-State Q-Learning line follower.
+    Main RL Training loop for 8-State Q-Learning line follower.
     Supports interactive sensor calibration, model initialization prompt, retraining, and CSV metrics logging.
     """
     robot = RobotInterface(use_simulator=use_simulator)
@@ -122,7 +122,7 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
     metrics_log = []
 
     print("==================================================")
-    print("Starting Q-Learning Training (5-State Clockwise Mode)...")
+    print("Starting Q-Learning Training (8-State Clockwise Mode)...")
     print("Episodes: {}, Max Steps/Episode: {}".format(num_episodes, max_steps_per_episode))
     print("Target Q-Table File: {}".format(save_path))
     print("==================================================")
@@ -154,7 +154,7 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
             # 2. Select action via Epsilon-Greedy policy
             action = agent.choose_action(state, epsilon)
 
-            # Track hard corrections (Action 2: Sharp LFT, Action 4: Sharp RGT)
+            # Track hard corrections (Action 3: Sharp LFT, Action 6: Sharp RGT)
             if action == settings.ACTION_SHARP_LEFT or action == settings.ACTION_SHARP_RIGHT:
                 hard_corrections += 1
 
@@ -206,7 +206,7 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
     print("Training finished successfully. Saved updated Q-table to:", save_path)
 
     # Write metrics to CSV (MicroPython compatible file writer)
-    csv_filename = "training_metrics_cw_5state.csv"
+    csv_filename = "training_metrics_cw_8state.csv"
 
 
     try:

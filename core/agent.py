@@ -19,7 +19,7 @@ except ImportError:
 class QLearningAgent:
     """
     Q-Learning Agent implemented in pure Python (no numpy dependency).
-    Supports 5-State Heuristic Initialization for Clockwise line following.
+    Supports 8-State Heuristic Initialization for Clockwise line following.
     """
     def __init__(self, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
                  alpha=settings.ALPHA, gamma=settings.GAMMA):
@@ -92,9 +92,17 @@ class QLearningAgent:
     def load(self, filepath):
         """
         Loads the Q-table from a pickle file.
+        Rejects tables whose shape does not match this agent's state/action space
+        (e.g. stale 3-State or 5-State model files).
         """
         with open(filepath, 'rb') as f:
-            self.q_table = pickle.load(f)
+            q_table = pickle.load(f)
+
+        if len(q_table) != self.n_states or any(len(row) != self.n_actions for row in q_table):
+            raise ValueError("Q-table shape mismatch in {}: expected {}x{}".format(
+                filepath, self.n_states, self.n_actions))
+
+        self.q_table = q_table
         print("[QLearningAgent] Q-table successfully loaded from {}".format(filepath))
 
     def display_q_table(self):

@@ -69,7 +69,7 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     try:
         agent.load(load_path)
     except Exception as e:
-        print("[Evaluate] Warning: Failed to load {}: {}. Agent will evaluate with zeroed Q-table.".format(load_path, e))
+        print("[Evaluate] Warning: Failed to load {}: {}. Agent will evaluate with the initial heuristic Q-table.".format(load_path, e))
 
     # Set epsilon = 0.0 for pure exploitation
     epsilon = 0.0
@@ -86,6 +86,7 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
             if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
                 print("[Evaluate] Obstacle detected by IR sensor! Executing reflex.")
                 hardcoded_obstacle_avoidance(robot)
+                iteration += 1
                 continue
 
             # 1. Read current intensity gradient
@@ -95,7 +96,7 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
             state = env.get_state(intensity)
 
             # 3. Select best action (pure exploitation)
-            action = agent.choose_action(state, epsilon=0.0)
+            action = agent.choose_action(state, epsilon)
 
             # 4. Execute action
             robot.execute_action(action)
