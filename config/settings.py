@@ -68,10 +68,9 @@ NUM_STATES = 8  # 7 Color States + 1 Lost/IR State
 BASE_SPEED = 250
 
 # Turn Direction Mode ("CW" for Clockwise, "CCW" for Counter-Clockwise)
+# Runtime-switchable via set_direction() -- used by the 180-degree obstacle turnaround.
 TURN_DIRECTION = "CW"
-
-# Invert Turn Directions (True if tracking opposite line edge or CCW)
-INVERT_TURNS = (TURN_DIRECTION == "CCW")
+INVERT_TURNS = False
 
 # Dynamic Speed Multipliers derived from BASE_SPEED
 FORWARD_SPEED      = BASE_SPEED
@@ -82,34 +81,50 @@ SHARP_OUTER_SPEED  = BASE_SPEED
 SHARP_INNER_SPEED  = -int(BASE_SPEED * 0.90)  # e.g., -225 deg/s pivot
 REVERSE_SPEED      = -int(BASE_SPEED * 0.70)  # e.g., -175 deg/s
 
-if not INVERT_TURNS:
-    # Clockwise Mapping (White -> Turn Left, Black -> Turn Right)
-    SPEED_MICRO_LEFT   = (MICRO_INNER_SPEED, FORWARD_SPEED)
-    SPEED_SLIGHT_LEFT  = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
-    SPEED_SHARP_LEFT   = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
-    SPEED_MICRO_RIGHT  = (FORWARD_SPEED, MICRO_INNER_SPEED)
-    SPEED_SLIGHT_RIGHT = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
-    SPEED_SHARP_RIGHT  = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
-else:
-    # Counter-Clockwise Inverted Mapping
-    SPEED_MICRO_LEFT   = (FORWARD_SPEED, MICRO_INNER_SPEED)
-    SPEED_SLIGHT_LEFT  = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
-    SPEED_SHARP_LEFT   = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
-    SPEED_MICRO_RIGHT  = (MICRO_INNER_SPEED, FORWARD_SPEED)
-    SPEED_SLIGHT_RIGHT = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
-    SPEED_SHARP_RIGHT  = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
-
-# Action Speed Tuples (Left Motor Speed, Right Motor Speed) in deg/s
+# Action Speed Tuples (Left Motor Speed, Right Motor Speed) in deg/s.
+# Direction-dependent entries are filled in by set_direction() below.
 ACTION_SPEEDS = {
-    ACTION_FORWARD:      (FORWARD_SPEED, FORWARD_SPEED),
-    ACTION_MICRO_LEFT:   SPEED_MICRO_LEFT,
-    ACTION_SLIGHT_LEFT:  SPEED_SLIGHT_LEFT,
-    ACTION_SHARP_LEFT:   SPEED_SHARP_LEFT,
-    ACTION_MICRO_RIGHT:  SPEED_MICRO_RIGHT,
-    ACTION_SLIGHT_RIGHT: SPEED_SLIGHT_RIGHT,
-    ACTION_SHARP_RIGHT:  SPEED_SHARP_RIGHT,
-    ACTION_REVERSE:      (REVERSE_SPEED, REVERSE_SPEED),
+    ACTION_FORWARD: (FORWARD_SPEED, FORWARD_SPEED),
+    ACTION_REVERSE: (REVERSE_SPEED, REVERSE_SPEED),
 }
+
+
+def set_direction(direction):
+    """
+    Rebuilds the action -> motor speed mapping for "CW" or "CCW" travel.
+    The same Q-table drives both directions: in CCW mode the speed tuples
+    are mirrored, so a logical 'left' action physically turns right
+    (the line is on the robot's other side after a 180-degree turnaround).
+    """
+    global TURN_DIRECTION, INVERT_TURNS
+    TURN_DIRECTION = direction
+    INVERT_TURNS = (direction == "CCW")
+
+    if not INVERT_TURNS:
+        # Clockwise Mapping (White -> Turn Left, Black -> Turn Right)
+        ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (MICRO_INNER_SPEED, FORWARD_SPEED)
+        ACTION_SPEEDS[ACTION_SLIGHT_LEFT]  = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
+        ACTION_SPEEDS[ACTION_SHARP_LEFT]   = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
+        ACTION_SPEEDS[ACTION_MICRO_RIGHT]  = (FORWARD_SPEED, MICRO_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_SLIGHT_RIGHT] = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_SHARP_RIGHT]  = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
+    else:
+        # Counter-Clockwise Inverted Mapping (mirrored left/right tuples)
+        ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (FORWARD_SPEED, MICRO_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_SLIGHT_LEFT]  = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_SHARP_LEFT]   = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_MICRO_RIGHT]  = (MICRO_INNER_SPEED, FORWARD_SPEED)
+        ACTION_SPEEDS[ACTION_SLIGHT_RIGHT] = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
+        ACTION_SPEEDS[ACTION_SHARP_RIGHT]  = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
+
+    print("[Settings] Drive direction set to {} (INVERT_TURNS={})".format(direction, INVERT_TURNS))
+
+
+set_direction(TURN_DIRECTION)
+
+# 180-degree obstacle turnaround parameters (tune TURN_180_MS for your wheelbase!)
+TURN_180_SPEED = 150   # deg/s pivot speed for the turnaround spin
+TURN_180_MS    = 1100  # spin duration for ~180 degrees
 
 
 

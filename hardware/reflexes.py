@@ -26,44 +26,64 @@ def is_on_edge(intensity):
 def hardcoded_obstacle_avoidance(robot):
     """
     RULE D: Hardcoded non-RL obstacle avoidance reflex.
-    Called when IR sensor reads distance < 20cm.
-    Reverses and sweeps left/right until read_intensity() detects the edge again.
+    Called when IR sensor reads distance below threshold.
+    Backs away, pivots 180 degrees, flips the CW/CCW motor mapping
+    (so the same Q-table keeps steering correctly with the line now on
+    the robot's other side), then re-acquires the track edge and
+    returns control to the RL agent travelling the opposite way.
     """
-    print("[Reflex] Obstacle detected! Interrupting RL agent control loop.")
+    print("[Reflex] Obstacle detected! Turning 180 degrees to go back.")
     robot.stop()
     wait(100)
 
-    # 1. Reverse away from the obstacle
-    robot.turn_direct(-120, -120, 600)
+    # 1. Back away from the obstacle
+    robot.turn_direct(-120, -120, 500)
     robot.stop()
     wait(100)
 
-    # 2. Sweep left to refind the track edge
+    # 2. Pivot ~180 degrees in place
+    robot.turn_direct(settings.TURN_180_SPEED, -settings.TURN_180_SPEED, settings.TURN_180_MS)
+    robot.stop()
+    wait(100)
+
+    # 3. Flip drive direction so 'left'/'right' actions still steer toward the edge
+    new_direction = "CCW" if settings.TURN_DIRECTION == "CW" else "CW"
+    settings.set_direction(new_direction)
+
+    # 4. Re-acquire the track edge, sweeping toward the line side first
+    #    (CW: line on the robot's right / CCW: line on the robot's left)
+    if settings.TURN_DIRECTION == "CW":
+        first_spin, second_spin = (100, -100), (-100, 100)
+    else:
+        first_spin, second_spin = (-100, 100), (100, -100)
+
     edge_found = False
     max_sweep_steps = 15
 
     for _ in range(max_sweep_steps):
-        robot.turn_direct(-100, 100, 100)  # Spin left slightly
+        robot.turn_direct(first_spin[0], first_spin[1], 100)
         intensity = robot.read_intensity()
         if is_on_edge(intensity):
             edge_found = True
-            print("[Reflex] Edge refound during left sweep (intensity={}).".format(intensity))
+            print("[Reflex] Edge refound during first sweep (intensity={}).".format(intensity))
             break
 
-    # 3. If left sweep fails, sweep right past center to refind edge
     if not edge_found:
-        print("[Reflex] Edge not found on left sweep. Sweeping right...")
+        print("[Reflex] Edge not found on first sweep. Sweeping back the other way...")
         for _ in range(max_sweep_steps * 2):
-            robot.turn_direct(100, -100, 100)  # Spin right slightly
+            robot.turn_direct(second_spin[0], second_spin[1], 100)
             intensity = robot.read_intensity()
             if is_on_edge(intensity):
                 edge_found = True
-                print("[Reflex] Edge refound during right sweep (intensity={}).".format(intensity))
+                print("[Reflex] Edge refound during second sweep (intensity={}).".format(intensity))
                 break
 
     robot.stop()
     wait(100)
-    print("[Reflex] Obstacle cleared & edge refound. Returning control to RL agent.")
+    if edge_found:
+        print("[Reflex] Turnaround complete. Now driving {}. Returning control to RL agent.".format(settings.TURN_DIRECTION))
+    else:
+        print("[Reflex] WARNING: Edge not refound after turnaround. RL agent resumes anyway ({}).".format(settings.TURN_DIRECTION))
 
 
 def detect_track_direction(robot):
