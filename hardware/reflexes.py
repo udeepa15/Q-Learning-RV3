@@ -23,14 +23,68 @@ def is_on_edge(intensity):
 
 
 
+def _spin_toward_white():
+    """
+    Spin tuple (left_speed, right_speed) that pans the sensor toward the
+    side where WHITE is expected for the current (direction, edge) config:
+    white on the right when INVERT_TURNS is False, on the left when True.
+    """
+    if not settings.INVERT_TURNS:
+        return (100, -100)   # spin right
+    return (-100, 100)       # spin left
+
+
+def confirm_correct_edge(robot):
+    """
+    The 5cm white strip has two edges that read identically at a single
+    point, but are mirror images (OUTER edge CW: black left / white right,
+    INNER edge CW: black right / white left). After re-acquiring an edge
+    band reading, nudge the sensor toward the expected WHITE side:
+      - Reading gets whiter (or stays in band) -> correct edge, nudge back.
+      - Reading gets blacker -> we grabbed the opposite edge of the strip;
+        sweep back across the white strip until the far edge is reached.
+    """
+    spin = _spin_toward_white()
+    back = (-spin[0], -spin[1])
+
+    robot.turn_direct(spin[0], spin[1], 150)
+    robot.stop()
+    intensity = robot.read_intensity()
+
+    if intensity >= settings.PERFECT_EDGE_LOW_8:
+        robot.turn_direct(back[0], back[1], 150)
+        robot.stop()
+        print("[Reflex] Edge identity confirmed: {} edge (probe intensity={}).".format(settings.LINE_EDGE, intensity))
+        return True
+
+    # Mirror image detected: white was on the unexpected side -> wrong edge.
+    print("[Reflex] WRONG edge acquired (probe intensity={}). Crossing strip back to the {} edge...".format(
+        intensity, settings.LINE_EDGE))
+    crossed_white = False
+    for _ in range(30):
+        robot.turn_direct(back[0], back[1], 100)
+        intensity = robot.read_intensity()
+        if not crossed_white:
+            if intensity >= settings.LIGHT_DRIFT_WHITE_THRESH_8:
+                crossed_white = True
+        elif is_on_edge(intensity):
+            robot.stop()
+            print("[Reflex] Correct {} edge re-acquired (intensity={}).".format(settings.LINE_EDGE, intensity))
+            return True
+
+    robot.stop()
+    print("[Reflex] WARNING: Could not cross back to the {} edge.".format(settings.LINE_EDGE))
+    return False
+
+
 def hardcoded_obstacle_avoidance(robot):
     """
     RULE D: Hardcoded non-RL obstacle avoidance reflex.
     Called when IR sensor reads distance below threshold.
-    Backs away, pivots 180 degrees, flips the CW/CCW motor mapping
-    (so the same Q-table keeps steering correctly with the line now on
-    the robot's other side), then re-acquires the track edge and
-    returns control to the RL agent travelling the opposite way.
+    Backs away, pivots 180 degrees, flips the travel direction mapping
+    (LINE_EDGE stays the same -- we return along the SAME physical edge),
+    re-acquires the track edge, verifies it is not the strip's opposite
+    edge, then returns control to the RL agent travelling the other way.
     """
     print("[Reflex] Obstacle detected! Turning 180 degrees to go back.")
     robot.stop()
@@ -46,16 +100,14 @@ def hardcoded_obstacle_avoidance(robot):
     robot.stop()
     wait(100)
 
-    # 3. Flip drive direction so 'left'/'right' actions still steer toward the edge
+    # 3. Flip travel direction; the followed edge (OUTER/INNER) is unchanged,
+    #    so set_direction recomputes which side white is on after the U-turn
     new_direction = "CCW" if settings.TURN_DIRECTION == "CW" else "CW"
     settings.set_direction(new_direction)
 
-    # 4. Re-acquire the track edge, sweeping toward the line side first
-    #    (CW: line on the robot's right / CCW: line on the robot's left)
-    if settings.TURN_DIRECTION == "CW":
-        first_spin, second_spin = (100, -100), (-100, 100)
-    else:
-        first_spin, second_spin = (-100, 100), (100, -100)
+    # 4. Re-acquire the track edge, sweeping toward the white/strip side first
+    first_spin = _spin_toward_white()
+    second_spin = (-first_spin[0], -first_spin[1])
 
     edge_found = False
     max_sweep_steps = 15
@@ -78,13 +130,19 @@ def hardcoded_obstacle_avoidance(robot):
                 print("[Reflex] Edge refound during second sweep (intensity={}).".format(intensity))
                 break
 
+    # 5. Make sure we grabbed OUR edge of the 5cm strip, not its mirror twin
+    if edge_found:
+        confirm_correct_edge(robot)
+
     robot.stop()
     wait(100)
     if edge_found:
-        print("[Reflex] Turnaround complete. Now driving {}. Returning control to RL agent.".format(settings.TURN_DIRECTION))
+        print("[Reflex] Turnaround complete. Now driving {} on the {} edge. Returning control to RL agent.".format(
+            settings.TURN_DIRECTION, settings.LINE_EDGE))
     else:
-        print("[Reflex] WARNING: Edge not refound after turnaround. RL agent resumes anyway ({}).".format(settings.TURN_DIRECTION))
-
+        print("[Reflex] WARNING: Edge not refound after turnaround. RL agent resumes anyway ({}, {} edge).".format(
+            settings.TURN_DIRECTION, settings.LINE_EDGE))
+ 
 
 def detect_track_direction(robot):
     """

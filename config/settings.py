@@ -70,6 +70,15 @@ BASE_SPEED = 250
 # Turn Direction Mode ("CW" for Clockwise, "CCW" for Counter-Clockwise)
 # Runtime-switchable via set_direction() -- used by the 180-degree obstacle turnaround.
 TURN_DIRECTION = "CW"
+
+# Which physical edge of the 5cm white strip we follow: "OUTER" or "INNER".
+# The two edges are mirror images:
+#   OUTER edge, CW : black on the left,  white on the right
+#   INNER edge, CW : black on the right, white on the left
+LINE_EDGE = "OUTER"
+
+# White is on the robot's right when (direction, edge) is CW+OUTER or CCW+INNER;
+# otherwise the left/right speed tuples must be mirrored.
 INVERT_TURNS = False
 
 # Dynamic Speed Multipliers derived from BASE_SPEED
@@ -89,19 +98,22 @@ ACTION_SPEEDS = {
 }
 
 
-def set_direction(direction):
+def set_direction(direction, edge=None):
     """
-    Rebuilds the action -> motor speed mapping for "CW" or "CCW" travel.
-    The same Q-table drives both directions: in CCW mode the speed tuples
-    are mirrored, so a logical 'left' action physically turns right
-    (the line is on the robot's other side after a 180-degree turnaround).
+    Rebuilds the action -> motor speed mapping for the given travel
+    direction ("CW"/"CCW") and followed strip edge ("OUTER"/"INNER").
+    The same Q-table drives every combination: whenever white sits on the
+    robot's left instead of its right, the speed tuples are mirrored so a
+    logical 'left' action physically turns right.
     """
-    global TURN_DIRECTION, INVERT_TURNS
+    global TURN_DIRECTION, INVERT_TURNS, LINE_EDGE
     TURN_DIRECTION = direction
-    INVERT_TURNS = (direction == "CCW")
+    if edge is not None:
+        LINE_EDGE = edge
+    INVERT_TURNS = (direction == "CCW") != (LINE_EDGE == "INNER")
 
     if not INVERT_TURNS:
-        # Clockwise Mapping (White -> Turn Left, Black -> Turn Right)
+        # White on the right (CW+OUTER / CCW+INNER): White -> Turn Left, Black -> Turn Right
         ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (MICRO_INNER_SPEED, FORWARD_SPEED)
         ACTION_SPEEDS[ACTION_SLIGHT_LEFT]  = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_LEFT]   = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
@@ -109,7 +121,7 @@ def set_direction(direction):
         ACTION_SPEEDS[ACTION_SLIGHT_RIGHT] = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_RIGHT]  = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
     else:
-        # Counter-Clockwise Inverted Mapping (mirrored left/right tuples)
+        # White on the left (CCW+OUTER / CW+INNER): mirrored left/right tuples
         ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (FORWARD_SPEED, MICRO_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SLIGHT_LEFT]  = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_LEFT]   = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
@@ -117,7 +129,8 @@ def set_direction(direction):
         ACTION_SPEEDS[ACTION_SLIGHT_RIGHT] = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_RIGHT]  = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
 
-    print("[Settings] Drive direction set to {} (INVERT_TURNS={})".format(direction, INVERT_TURNS))
+    print("[Settings] Drive config: direction={}, edge={} (INVERT_TURNS={})".format(
+        TURN_DIRECTION, LINE_EDGE, INVERT_TURNS))
 
 
 set_direction(TURN_DIRECTION)
