@@ -65,7 +65,7 @@ NUM_STATES = 8  # 7 Color States + 1 Lost/IR State
 # ROBOT SPEED & DIRECTION CONTROL CONFIGURATION
 # ----------------------------------------------------
 # Base Drive Speed Parameter (deg/s) - Change this number to adjust overall robot speed!
-BASE_SPEED = 250
+BASE_SPEED = 300
 
 # Turn Direction Mode ("CW" for Clockwise, "CCW" for Counter-Clockwise)
 # Runtime-switchable via set_direction() -- used by the 180-degree obstacle turnaround.
@@ -136,7 +136,7 @@ def set_direction(direction, edge=None):
 set_direction(TURN_DIRECTION)
 
 # 180-degree obstacle turnaround parameters (tune TURN_180_MS for your wheelbase!)
-TURN_180_SPEED = 150   # deg/s pivot speed for the turnaround spin
+TURN_180_SPEED = 200   # deg/s pivot speed for the turnaround spin
 TURN_180_MS    = 5000  # spin duration for ~180 degrees
 
 

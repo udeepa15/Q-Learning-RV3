@@ -33,18 +33,18 @@ class QLearningAgent:
 
     def _initialize_q_table(self):  
         """
-        Injects empirical initial Q-values for 8-State, 8-Action Clockwise line following:
-        Actions: [FWD, M_LFT, S_LFT, SH_LFT, M_RGT, S_RGT, SH_RGT, REV]
+        Injects clean initial Q-values (0.0 and 5.0) for 8-State, 8-Action Clockwise line following:
+        Actions: [0: FWD, 1: M_LFT, 2: S_LFT, 3: SH_LFT, 4: M_RGT, 5: S_RGT, 6: SH_RGT, 7: REV]
         """
         return [
-            [ 1.6,  3.5,  8.3, 10.1,  2.5,  3.4,  2.2,  1.6],  # Row 0: Pure White   -> Sharp LFT (10.1*)
-            [ 3.4,  5.3, 10.8,  6.0,  1.6, -2.7, -0.9,  1.8],  # Row 1: Medium Drift -> Slight LFT (10.8*)
-            [ 3.7, 11.7,  8.2,  2.3,  1.3, -2.5, -3.1, -0.7],  # Row 2: Light Drift  -> Micro LFT (11.7*)
-            [12.1, 13.7, 11.5,  6.9,  6.0,  1.7,  1.2,  6.2],  # Row 3: Micro Drift  -> Micro LFT (13.7*)
-            [16.0,  9.0,  9.5,  9.7, 10.0, 10.5,  7.2,  6.2],  # Row 4: Perfect Edge -> Drive FWD (16.0*)
-            [ 5.9,  2.1,  5.5,  2.5, 12.5, 11.1,  8.5,  4.6],  # Row 5: Drift Black  -> Micro RGT (12.5*)
-            [ 4.1,  3.3,  3.4,  4.0,  4.0, 10.0, 10.9,  3.6],  # Row 6: Pure Black   -> Sharp RGT (10.9*)
-            [ 0.0,  0.0,  0.0,  0.0,  0.0,  0.0,  0.0, 10.0]   # Row 7: Lost / IR    -> Reverse (10.0*)
+            [0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0],  # Row 0: Pure White   -> Sharp LFT (5.0)
+            [0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 1: Medium Drift -> Slight LFT (5.0)
+            [0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 2: Light Drift  -> Micro LFT (5.0)
+            [0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 3: Micro Drift  -> Micro LFT (5.0)
+            [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 4: Perfect Edge -> Drive FWD (5.0)
+            [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0],  # Row 5: Drift Black  -> Micro RGT (5.0)
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0],  # Row 6: Pure Black   -> Sharp RGT (5.0)
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0]   # Row 7: Lost / IR    -> Reverse (5.0)
         ]
 
     def choose_action(self, state, epsilon):

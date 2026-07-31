@@ -77,6 +77,48 @@ def confirm_correct_edge(robot):
     return False
 
 
+def spiral_search_for_edge(robot, max_steps=45):
+    """
+    Expanding Archimedean spiral search routine to re-acquire the track edge
+    when initial left/right sweeps fail to locate the white strip.
+    Gradually increases inner wheel speed relative to outer wheel speed
+    so the robot drives in an expanding spiral arc, checking intensity at each step.
+    """
+    print("[Reflex] Initial sweeps failed. Starting expanding spiral search recovery...")
+    
+    outer_speed = 200
+    base_inner = 30
+    
+    # Determine curve direction towards the side where white is expected
+    if not settings.INVERT_TURNS:
+        # White on right -> curve rightward in an expanding arc
+        left_is_outer = True
+    else:
+        # White on left -> curve leftward in an expanding arc
+        left_is_outer = False
+
+    for step in range(max_steps):
+        # Increase inner wheel speed progressively (caps at 160 to maintain expanding curve)
+        inner_speed = min(160, base_inner + int(step * 3))
+        
+        if left_is_outer:
+            ls, rs = outer_speed, inner_speed
+        else:
+            ls, rs = inner_speed, outer_speed
+            
+        robot.turn_direct(ls, rs, 80)
+        intensity = robot.read_intensity()
+        
+        if is_on_edge(intensity) or intensity >= settings.LIGHT_DRIFT_WHITE_THRESH_8:
+            robot.stop()
+            print("[Reflex] Track edge refound during spiral search at step {} (intensity={:.1f})!".format(step + 1, intensity))
+            return True
+            
+    robot.stop()
+    print("[Reflex] Spiral search completed without detecting track edge.")
+    return False
+
+
 def hardcoded_obstacle_avoidance(robot):
     """
     RULE D: Hardcoded non-RL obstacle avoidance reflex.
@@ -129,6 +171,10 @@ def hardcoded_obstacle_avoidance(robot):
                 edge_found = True
                 print("[Reflex] Edge refound during second sweep (intensity={}).".format(intensity))
                 break
+
+    # 4.5. If edge is STILL not found after both sweeps -> Perform Expanding Spiral Search!
+    if not edge_found:
+        edge_found = spiral_search_for_edge(robot)
 
     # 5. Make sure we grabbed OUR edge of the 5cm strip, not its mirror twin
     if edge_found:
@@ -263,8 +309,8 @@ def calibrate_color_sensor(robot):
     settings.BLACK_INTENSITY = int(black_val)
     settings.EDGE_INTENSITY = int(edge_val)
 
-    # Proportionally lower TOTALLY_LOST_THRESHOLD so normal black doesn't trigger lost state
-    settings.TOTALLY_LOST_THRESHOLD = max(1, int(black_val * 0.4))
+    # Set TOTALLY_LOST_THRESHOLD slightly above pure black reading so off-track black triggers lost state
+    settings.TOTALLY_LOST_THRESHOLD = int(black_val + 0.8)
 
     # 8-State Thresholds (With Edge Deadband zone to eliminate penguin waddling)
     deadband_offset = max(3, int((white_val - black_val) * 0.12))
