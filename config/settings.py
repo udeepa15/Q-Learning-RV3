@@ -9,14 +9,14 @@ try:
     from pybricks.parameters import Port
     PORT_LEFT_MOTOR = Port.B
     PORT_RIGHT_MOTOR = Port.C
-    PORT_COLOR_SENSOR = Port.S2
-    PORT_IR_SENSOR = Port.S3
+    PORT_COLOR_SENSOR = Port.S1
+    PORT_IR_SENSOR = Port.S4
 except ImportError:
     # PC Fallback port representations
     PORT_LEFT_MOTOR = "Port.B"
     PORT_RIGHT_MOTOR = "Port.C"
-    PORT_COLOR_SENSOR = "Port.S2"
-    PORT_IR_SENSOR = "Port.S3"
+    PORT_COLOR_SENSOR = "Port.S1"
+    PORT_IR_SENSOR = "Port.S4"
 
 # Reinforcement Learning Hyperparameters
 ALPHA = 0.2            # Learning rate (smoothed for stable convergence)
@@ -27,23 +27,23 @@ EPSILON_START = 0.3    # Initial exploration rate
 EPSILON_DECAY = 0.97   # Exploration decay per episode
 EPSILON_MIN = 0.01     # Minimum exploration rate
 
-# 8-State Environment Intensity Values and Thresholds (3 sub-gradient white states)
-WHITE_INTENSITY = 35
-BLACK_INTENSITY = 4
-EDGE_INTENSITY = 14
+# 8-State Environment Intensity Values and Thresholds (Updated for calibrated surface readings)
+WHITE_INTENSITY = 24.1
+BLACK_INTENSITY = 2.5
+EDGE_INTENSITY = 11.1
 
-# Intensity Thresholds for 8 States (With Wide Edge Deadband to Stop Penguin Waddling)
-PURE_WHITE_THRESHOLD_8       = 32  # State 0: Pure White (>= 32)
-MEDIUM_DRIFT_WHITE_THRESH_8  = 28  # State 1: Medium Drift (28 - 32)
-LIGHT_DRIFT_WHITE_THRESH_8   = 25  # State 2: Light Drift (25 - 28)
-                                   # State 3: Micro Drift (18 - 25)
-PERFECT_EDGE_HIGH_8          = 18  # State 4: Edge High Bound
-PERFECT_EDGE_LOW_8           = 12  # State 4: Edge Low Bound -> Deadband (12 - 18)
-DRIFT_BLACK_THRESHOLD_8      = 9   # State 5: Drift Black (9 - 12)
-                                   # State 6: Pure Black (< 9)
+# Intensity Thresholds for 8 States (With Edge Deadband to Stop Penguin Waddling)
+PURE_WHITE_THRESHOLD_8       = 23  # State 0: Pure White (>= 23)
+MEDIUM_DRIFT_WHITE_THRESH_8  = 20  # State 1: Medium Drift (20 <= Intensity < 23)
+LIGHT_DRIFT_WHITE_THRESH_8   = 17  # State 2: Light Drift (17 <= Intensity < 20)
+                                   # State 3: Micro Drift (14 <= Intensity < 17)
+PERFECT_EDGE_HIGH_8          = 14  # State 4: Edge High Bound
+PERFECT_EDGE_LOW_8           = 8   # State 4: Edge Low Bound -> Deadband (8 <= Intensity < 14)
+DRIFT_BLACK_THRESHOLD_8      = 4   # State 5: Drift Black (4 <= Intensity < 8)
+                                   # State 6: Pure Black (< 4)
 
 
-TOTALLY_LOST_THRESHOLD = 3          # State 7: Intensity < 3 considered deep off-track black
+TOTALLY_LOST_THRESHOLD = 1          # State 7: Intensity < 1 considered deep off-track black
 TOTALLY_LOST_CONSECUTIVE_STEPS = 12 # 12 consecutive steps (1.2s) allowed to steer out of black
 
 
@@ -87,7 +87,7 @@ MICRO_INNER_SPEED  = int(BASE_SPEED * 0.15)   # e.g., 37 deg/s (gentle micro tur
 SLIGHT_OUTER_SPEED = BASE_SPEED
 SLIGHT_INNER_SPEED = int(BASE_SPEED * 0.35)   # e.g., 87 deg/s (slight turn)
 SHARP_OUTER_SPEED  = BASE_SPEED
-SHARP_INNER_SPEED  = -int(BASE_SPEED * 0.90)  # e.g., -225 deg/s pivot
+SHARP_INNER_SPEED  = -int(BASE_SPEED * 1.00)  # e.g., -250 deg/s full pivot spin (increased turn sharpness)
 REVERSE_SPEED      = -int(BASE_SPEED * 0.70)  # e.g., -175 deg/s
 
 # Action Speed Tuples (Left Motor Speed, Right Motor Speed) in deg/s.
@@ -137,7 +137,7 @@ set_direction(TURN_DIRECTION)
 
 # 180-degree obstacle turnaround parameters (tune TURN_180_MS for your wheelbase!)
 TURN_180_SPEED = 150   # deg/s pivot speed for the turnaround spin
-TURN_180_MS    = 1100  # spin duration for ~180 degrees
+TURN_180_MS    = 5000  # spin duration for ~180 degrees
 
 
 

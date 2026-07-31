@@ -12,7 +12,7 @@ ev3_rl_project/
 │   └── settings.py       # Hyperparameters, thresholds, action speeds & port mappings
 ├── hardware/
 │   ├── robot.py          # Pybricks device driver & PC simulator fallback
-│   └── reflexes.py       # Hardcoded reflexes (Obstacle Avoidance & CW/CCW Detection)
+│   └── reflexes.py       # Hardcoded reflexes (Obstacle Avoidance, Edge Confirm, & CW/CCW Detection)
 ├── core/
 │   ├── agent.py          # Pure Python Q-Learning agent with Bellman update
 │   └── environment.py    # State discretizer & reward function (Reverse Trap logic)
@@ -26,7 +26,7 @@ ev3_rl_project/
 ## 2. Reinforcement Learning Mathematics
 
 ### Bellman Equation Update
-The Q-table is represented as a 2D matrix of shape $(N_{\text{states}} \times N_{\text{actions}}) = (4 \times 6)$.
+The Q-table is represented as a 2D matrix of shape $(N_{\text{states}} \times N_{\text{actions}}) = (8 \times 8)$.
 
 The value of state-action pair $(s, a)$ is updated after each step according to the Bellman Equation:
 
@@ -35,38 +35,44 @@ Q(s, a) \leftarrow Q(s, a) + \alpha \cdot \left[ r + \gamma \cdot \max_{a'} Q(s'
 \]
 
 Where:
-- $\alpha = 0.4$ (Learning Rate)
+- $\alpha = 0.2$ (Learning Rate)
 - $\gamma = 0.7$ (Discount Factor)
 - $r$ is the immediate reward returned by `Environment.calculate_reward(s, a)`
 - $s'$ is the resulting next state
 
 ---
 
-## 3. Discretized State Space (4 States)
+## 3. Discretized State Space (8 States)
 
-Continuous color sensor reflection values ($0 - 100\%$) are mapped into 4 discrete states:
+Continuous color sensor reflection values ($0 - 100\%$) are mapped into 8 discrete states using calibrated thresholds:
 
 | State Index | State Name | Intensity Criteria | Description |
 |---|---|---|---|
-| `0` | `STATE_TOO_WHITE` | $\text{intensity} \ge 28$ | Sensor is fully over the white track background. |
-| `1` | `STATE_PERFECT_EDGE` | $11 < \text{intensity} < 28$ | Sensor is tracking the boundary gradient between white and black. |
-| `2` | `STATE_TOO_BLACK` | $5 \le \text{intensity} \le 11$ | Sensor is drifting too far into black territory. |
-| `3` | `STATE_TOTALLY_LOST` | $\text{intensity} < 5$ for $\ge 3$ steps | Robot has driven completely off the line into pure black. |
+| `0` | `STATE_PURE_WHITE` | $\text{intensity} \ge 23$ | Sensor is fully over the pure white surface ($\text{White} = 24.1$). |
+| `1` | `STATE_MEDIUM_DRIFT_WHITE` | $20 \le \text{intensity} < 23$ | Sensor is drifting white. |
+| `2` | `STATE_LIGHT_DRIFT_WHITE` | $17 \le \text{intensity} < 20$ | Sensor is lightly drifting white. |
+| `3` | `STATE_MICRO_DRIFT_WHITE` | $14 \le \text{intensity} < 17$ | Sensor is micro drifting white. |
+| `4` | `STATE_PERFECT_EDGE` | $8 \le \text{intensity} < 14$ | Sensor is in the optimal Forward Deadband ($\text{Edge} = 11.1$). |
+| `5` | `STATE_DRIFT_BLACK` | $4 \le \text{intensity} < 8$ | Sensor is drifting into black territory. |
+| `6` | `STATE_PURE_BLACK` | $\text{intensity} < 4$ | Sensor is over pure black ($\text{Black} = 2.5$). |
+| `7` | `STATE_TOTALLY_LOST` | $\text{intensity} < 1$ for $\ge 12$ steps | Robot has driven completely off the line. |
 
 ---
 
-## 4. Action Space (6 Actions - RULE B)
+## 4. Action Space (8 Actions - RULE B)
 
-To guarantee smooth curvature tracking, the action space contains 6 distinct motor speed pairs:
+To guarantee smooth curvature tracking and sharp turns, the action space contains 8 motor speed actions (Base Speed = $250\text{ deg/s}$):
 
 | Action ID | Name | Left Speed (deg/s) | Right Speed (deg/s) | Motion Profile |
 |---|---|---|---|---|
-| `0` | `ACTION_FORWARD` | $150$ | $150$ | Straight line acceleration |
-| `1` | `ACTION_SLIGHT_LEFT` | $80$ | $150$ | Soft left curve |
-| `2` | `ACTION_SHARP_LEFT` | $-80$ | $150$ | In-place / sharp left pivot |
-| `3` | `ACTION_SLIGHT_RIGHT` | $150$ | $80$ | Soft right curve |
-| `4` | `ACTION_SHARP_RIGHT` | $150$ | $-80$ | In-place / sharp right pivot |
-| `5` | `ACTION_REVERSE` | $-100$ | $-100$ | Backward reversal |
+| `0` | `ACTION_FORWARD` | $250$ | $250$ | Straight line acceleration |
+| `1` | `ACTION_MICRO_LEFT` | $37$ | $250$ | Gentle micro-turn left |
+| `2` | `ACTION_SLIGHT_LEFT` | $87$ | $250$ | Soft curve left |
+| `3` | `ACTION_SHARP_LEFT` | $-250$ | $250$ | Equal-speed pivot spin left |
+| `4` | `ACTION_MICRO_RIGHT` | $250$ | $37$ | Gentle micro-turn right |
+| `5` | `ACTION_SLIGHT_RIGHT` | $250$ | $87$ | Soft curve right |
+| `6` | `ACTION_SHARP_RIGHT` | $250$ | $-250$ | Equal-speed pivot spin right |
+| `7` | `ACTION_REVERSE` | $-175$ | $-175$ | Backward reversal |
 
 ---
 
@@ -75,26 +81,17 @@ To guarantee smooth curvature tracking, the action space contains 6 distinct mot
 ### RULE A: The Reverse Trap
 - **Requirement**: The robot must learn to reverse natively using Q-learning when lost; reversing cannot be hardcoded into the RL decision loop.
 - **Mechanism**:
-  - In `Environment.get_state()`, consecutive steps below intensity $5$ are counted.
-  - When $\ge 3$ steps are recorded, state transitions to `STATE_TOTALLY_LOST`.
+  - In `Environment.get_state()`, consecutive steps below intensity $1$ are counted.
+  - When $\ge 12$ steps ($1.2\text{s}$) are recorded, state transitions to `STATE_TOTALLY_LOST`.
   - In `Environment.calculate_reward()`:
-    - If action is `ACTION_REVERSE` (5): **$+5.0$ reward**.
-    - If action is forward/turning (0-4): **$-5.0$ penalty**.
-  - As a result, the Bellman equation naturally updates $Q(\text{TOTALLY\_LOST}, \text{REVERSE})$ to be the dominant maximum value.
+    - If action is `ACTION_REVERSE` (7): **$+5.0$ reward**.
+    - If action is forward/turning: **$-5.0$ penalty**.
 
 ### RULE B: Action Smoothness
-- 6-action space allows gentle steering corrections (`SLIGHT_LEFT`, `SLIGHT_RIGHT`) rather than abrupt binary left/right oscillation.
+- 8-action space includes `MICRO_LEFT` / `MICRO_RIGHT` for deadband tracking without penguin waddling.
 
 ### RULE C: Clockwise vs Anti-Clockwise (CCW) Support
-- **Mechanism**:
-  - `detect_track_direction(robot)` sweeps left at startup.
-  - If intensity $\ge 28$ (White), returns `"CCW"`.
-  - If intensity $\le 11$ (Black), returns `"CW"`.
-  - `evaluate.py` dynamically loads `models/cw_q_table.pkl` or `models/ccw_q_table.pkl`.
+- `detect_track_direction(robot)` sweeps left at startup and determines CW vs CCW based on intensity.
 
 ### RULE D: Non-RL Obstacle Reflex
-- **Mechanism**:
-  - `hardcoded_obstacle_avoidance(robot)` is a deterministic non-RL safety routine.
-  - Triggered whenever `read_ir() < 20cm`.
-  - Reverses, then sweeps left and right until `read_intensity()` detects an edge intensity ($11 < \text{intensity} < 28$).
-  - `train.py` and `evaluate.py` yield control immediately and skip Q-table updates while the obstacle reflex is active.
+- `hardcoded_obstacle_avoidance(robot)` handles IR obstacle avoidance with a 180° turnaround reflex.

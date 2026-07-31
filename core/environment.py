@@ -47,7 +47,7 @@ class Environment:
         elif intensity >= settings.PERFECT_EDGE_HIGH_8:
             return STATE_MICRO_DRIFT_WHITE
         elif intensity >= settings.PERFECT_EDGE_LOW_8:
-            return STATE_PERFECT_EDGE  # Edge Deadband Range (12 - 18)
+            return STATE_PERFECT_EDGE  # Edge Deadband Range (8 - 14)
         elif intensity >= settings.DRIFT_BLACK_THRESHOLD_8:
             return STATE_DRIFT_BLACK
         else:
