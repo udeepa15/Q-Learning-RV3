@@ -25,8 +25,7 @@ except ImportError:
 
 from config import settings
 from hardware.robot import RobotInterface
-from hardware.reflexes import hardcoded_obstacle_avoidance
-
+from hardware.reflexes import hardcoded_obstacle_avoidance, load_calibration
 from core.agent import QLearningAgent
 from core.environment import Environment
 
@@ -45,6 +44,10 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     Evaluation loop executing pure Q-table exploitation with track direction detection.
     """
     robot = RobotInterface(use_simulator=use_simulator)
+
+    # Load intensity thresholds calibrated during training
+    load_calibration()
+
     agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
     env = Environment()
 
@@ -53,7 +56,6 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     print("==================================================")
 
     model_filename = "models/cw_q_table_8state.pkl"
-
     fallback_filename = "models/cw_q_table.pkl"
 
     if file_exists(model_filename):
@@ -62,9 +64,6 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
         load_path = fallback_filename
     else:
         load_path = model_filename
-
-
-
 
     try:
         agent.load(load_path)

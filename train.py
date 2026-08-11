@@ -1,7 +1,8 @@
 #!/usr/bin/env pybricks-micropython
 """
 Training Script for EV3 Q-Learning Line Follower Agent.
-Supports EV3 button selection for CW/CCW track direction and incremental Q-table retraining.
+Supports EV3 button selection for CW/CCW track direction, interactive sensor calibration,
+retraining, and end-of-training model save/discard options (with date stamping).
 """
 
 import sys
@@ -38,6 +39,113 @@ def file_exists(filename):
         return True
     except Exception:
         return False
+
+
+def generate_dated_filename(base_path):
+    """
+    Generates a filename with current date and time stamp.
+    e.g., models/cw_q_table_8state.pkl -> models/cw_q_table_8state_2026-08-07_09-24.pkl
+    """
+    import time
+    t = time.localtime()
+    date_str = "{:04d}-{:02d}-{:02d}_{:02d}-{:02d}".format(t[0], t[1], t[2], t[3], t[4])
+
+    if "." in base_path:
+        parts = base_path.rsplit(".", 1)
+        return "{}_{}.{}".format(parts[0], date_str, parts[1])
+    else:
+        return "{}_{}".format(base_path, date_str)
+
+
+def prompt_save_q_table(agent, save_path, robot):
+    """
+    Prompts user at the end of training to:
+      1. Save Q-table to default path
+      2. Save Q-table with current date-time stamp in models directory
+      3. Discard Q-table (do not save)
+    Supports EV3 brick button menu and terminal input fallback for simulator mode.
+    """
+    dated_path = generate_dated_filename(save_path)
+
+    has_buttons = False
+    if not robot.is_simulated and hasattr(robot, 'ev3') and robot.ev3 is not None:
+        try:
+            from pybricks.parameters import Button
+            has_buttons = True
+        except ImportError:
+            has_buttons = False
+
+    print("\n==================================================")
+    print("           TRAINING FINISHED: SAVE MENU            ")
+    print("==================================================")
+    print(" Choose how to save the updated Q-table:")
+    print(" -> Option 1 (UP Button / '1')    : Default Path ({})".format(save_path))
+    print(" -> Option 2 (RIGHT Button / '2') : Date-Stamped ({})".format(dated_path))
+    print(" -> Option 3 (DOWN Button / '3')  : DISCARD (Do not save)")
+    print("==================================================\n")
+
+    chosen_action = None
+
+    if has_buttons:
+        from pybricks.parameters import Button
+        print("[Train] Waiting for EV3 button press (UP=Default, RIGHT=Date-Stamped, DOWN=Discard)...")
+        while True:
+            pressed = robot.ev3.buttons.pressed()
+            if Button.UP in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=1000, duration=150)
+                except Exception:
+                    pass
+                chosen_action = 'default'
+                wait(500)
+                break
+            elif Button.RIGHT in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=1200, duration=150)
+                except Exception:
+                    pass
+                chosen_action = 'dated'
+                wait(500)
+                break
+            elif Button.DOWN in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=500, duration=300)
+                except Exception:
+                    pass
+                chosen_action = 'discard'
+                wait(500)
+                break
+            wait(100)
+    else:
+        try:
+            user_choice = input("Enter option [1=Default, 2=Date-Stamped, 3=Discard] (default: 1): ").strip()
+            if user_choice == "2":
+                chosen_action = 'dated'
+            elif user_choice == "3":
+                chosen_action = 'discard'
+            else:
+                chosen_action = 'default'
+        except (EOFError, RuntimeError):
+            print("[Train] Non-interactive environment. Saving to default path.")
+            chosen_action = 'default'
+
+    if chosen_action == 'discard':
+        print("\n[Train] DISCARDED: Q-table updates were NOT saved.")
+        return None
+
+    target_path = dated_path if chosen_action == 'dated' else save_path
+
+    if "/" in target_path:
+        model_dir = target_path.rsplit("/", 1)[0]
+        if model_dir:
+            try:
+                os.mkdir(model_dir)
+            except Exception:
+                pass
+
+    agent.save(target_path)
+    print("\n[Train] SUCCESS: Updated Q-table saved to:", target_path)
+    return target_path
 
 
 def select_model_initialization(robot, save_path, force_fresh=False):
@@ -90,7 +198,6 @@ def select_model_initialization(robot, save_path, force_fresh=False):
 
 
 def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_simulator=False, force_fresh=False):
-
     """
     Main RL Training loop for 8-State Q-Learning line follower.
     Supports interactive sensor calibration, model initialization prompt, retraining, and CSV metrics logging.
@@ -102,7 +209,6 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
     
     if save_path is None:
         save_path = "models/cw_q_table_8state.pkl"
-
 
     agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
     env = Environment()
@@ -128,8 +234,6 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
     print("==================================================")
 
     lost_state_id = STATE_TOTALLY_LOST
-
-
 
     for episode in range(1, num_episodes + 1):
         env.reset()
@@ -190,24 +294,13 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
         # Dynamic Q-table snapshot display after each episode
         agent.display_q_table()
 
-
     robot.stop()
 
-    # Create target directory if needed and save Q-table (MicroPython compatible)
-    if "/" in save_path:
-        model_dir = save_path.rsplit("/", 1)[0]
-        if model_dir:
-            try:
-                os.mkdir(model_dir)
-            except Exception:
-                pass
-
-    agent.save(save_path)
-    print("Training finished successfully. Saved updated Q-table to:", save_path)
+    # Prompt user to save to default path, date-stamped path, or discard
+    prompt_save_q_table(agent, save_path, robot)
 
     # Write metrics to CSV (MicroPython compatible file writer)
     csv_filename = "training_metrics_cw_8state.csv"
-
 
     try:
         with open(csv_filename, 'w') as f:
@@ -224,4 +317,3 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
 if __name__ == "__main__":
     target_file = sys.argv[1] if len(sys.argv) > 1 else None
     train_agent(num_episodes=40, max_steps_per_episode=60, save_path=target_file)
-

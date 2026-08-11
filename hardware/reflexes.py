@@ -222,6 +222,71 @@ def detect_track_direction(robot):
     return direction
 
 
+def save_calibration(filepath="models/calibration.json"):
+    """
+    Saves current color sensor intensity thresholds to JSON file.
+    """
+    import os
+    try:
+        import json
+    except ImportError:
+        import ujson as json
+
+    if "/" in filepath:
+        d = filepath.rsplit("/", 1)[0]
+        if d:
+            try:
+                os.mkdir(d)
+            except Exception:
+                pass
+
+    cal_data = {
+        "WHITE_INTENSITY": settings.WHITE_INTENSITY,
+        "BLACK_INTENSITY": settings.BLACK_INTENSITY,
+        "EDGE_INTENSITY": settings.EDGE_INTENSITY,
+        "TOTALLY_LOST_THRESHOLD": settings.TOTALLY_LOST_THRESHOLD,
+        "PERFECT_EDGE_HIGH_8": settings.PERFECT_EDGE_HIGH_8,
+        "PERFECT_EDGE_LOW_8": settings.PERFECT_EDGE_LOW_8,
+        "LIGHT_DRIFT_WHITE_THRESH_8": settings.LIGHT_DRIFT_WHITE_THRESH_8,
+        "MEDIUM_DRIFT_WHITE_THRESH_8": settings.MEDIUM_DRIFT_WHITE_THRESH_8,
+        "PURE_WHITE_THRESHOLD_8": settings.PURE_WHITE_THRESHOLD_8,
+        "DRIFT_BLACK_THRESHOLD_8": settings.DRIFT_BLACK_THRESHOLD_8
+    }
+
+    try:
+        with open(filepath, 'w') as f:
+            json.dump(cal_data, f)
+        print("[Calibration] Saved calibration thresholds to:", filepath)
+        return True
+    except Exception as e:
+        print("[Calibration] ERROR saving calibration ({}):".format(e))
+        return False
+
+
+def load_calibration(filepath="models/calibration.json"):
+    """
+    Loads saved color sensor intensity thresholds from JSON file into settings.
+    """
+    try:
+        import json
+    except ImportError:
+        import ujson as json
+
+    try:
+        with open(filepath, 'r') as f:
+            cal_data = json.load(f)
+
+        for key, val in cal_data.items():
+            if hasattr(settings, key):
+                setattr(settings, key, val)
+
+        print("[Calibration] Successfully loaded saved intensity thresholds from:", filepath)
+        return True
+    except Exception as e:
+        print("[Calibration] Note: Could not load saved calibration ({}). Using settings defaults.".format(e))
+        return False
+
+
 def calibrate_color_sensor(robot):
     """
     Interactive color sensor calibration routine on EV3 brick:
@@ -232,11 +297,13 @@ def calibrate_color_sensor(robot):
     """
     if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
         print("[Calibration] Simulator mode detected. Skipping interactive calibration.")
+        load_calibration()
         return
 
     try:
         from pybricks.parameters import Button
     except ImportError:
+        load_calibration()
         return
 
     def wait_for_center_button(prompt_text):
@@ -268,7 +335,7 @@ def calibrate_color_sensor(robot):
     print("\n==================================================")
     print("      SENSOR INTENSITY CALIBRATION MENU           ")
     print(" -> Press CENTER Button : Start Sensor Calibration")
-    print(" -> Press DOWN Button   : Skip Calibration (Defaults)")
+    print(" -> Press DOWN Button   : Skip Calibration (Load Saved/Defaults)")
     print(" (Waiting for button press...)")
     print("==================================================\n")
 
@@ -283,11 +350,11 @@ def calibrate_color_sensor(robot):
             wait(500)
             break
         elif Button.DOWN in pressed:
-            print("[Calibration] Skipped calibration. Using default thresholds.")
+            print("[Calibration] Skipped calibration. Loading saved thresholds or defaults.")
+            load_calibration()
             wait(500)
             return
         wait(100)
-
 
     # 1. Pure White
     white_val = wait_for_center_button("1/3 PURE WHITE SURFACE")
@@ -302,6 +369,7 @@ def calibrate_color_sensor(robot):
     if not (white_val > edge_val > black_val):
         print("[Calibration] WARNING: Readings abnormal (White={:.1f}, Edge={:.1f}, Black={:.1f}). Using defaults.".format(
             white_val, edge_val, black_val))
+        load_calibration()
         return
 
     # Update base intensities in settings
@@ -327,6 +395,9 @@ def calibrate_color_sensor(robot):
 
     settings.DRIFT_BLACK_THRESHOLD_8   = int(black_val + lower_span * 0.4)
 
+    # Save calibrated thresholds to models/calibration.json
+    save_calibration()
+
     print("\n==================================================")
     print("      CALIBRATION COMPLETE & THRESHOLDS UPDATED   ")
     print("==================================================")
@@ -347,8 +418,6 @@ def calibrate_color_sensor(robot):
     print("==================================================")
     print(" -> PRESS CENTER BUTTON TO CONFIRM & START TRAINING")
     print("==================================================\n")
-
-
 
     # Hold execution until user presses CENTER button
     while True:

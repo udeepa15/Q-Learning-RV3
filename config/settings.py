@@ -65,7 +65,7 @@ NUM_STATES = 8  # 7 Color States + 1 Lost/IR State
 # ROBOT SPEED & DIRECTION CONTROL CONFIGURATION
 # ----------------------------------------------------
 # Base Drive Speed Parameter (deg/s) - Change this number to adjust overall robot speed!
-BASE_SPEED = 300
+BASE_SPEED = 200
 
 # Turn Direction Mode ("CW" for Clockwise, "CCW" for Counter-Clockwise)
 # Runtime-switchable via set_direction() -- used by the 180-degree obstacle turnaround.
@@ -83,12 +83,16 @@ INVERT_TURNS = False
 
 # Dynamic Speed Multipliers derived from BASE_SPEED
 FORWARD_SPEED      = BASE_SPEED
-MICRO_INNER_SPEED  = int(BASE_SPEED * 0.15)   # e.g., 37 deg/s (gentle micro turn)
+MICRO_OUTER_SPEED  = BASE_SPEED
+MICRO_INNER_SPEED  = int(BASE_SPEED * 0.70)   # Micro turn: gentle curve (diff = 30% BASE_SPEED)
+
 SLIGHT_OUTER_SPEED = BASE_SPEED
-SLIGHT_INNER_SPEED = int(BASE_SPEED * 0.35)   # e.g., 87 deg/s (slight turn)
+SLIGHT_INNER_SPEED = int(BASE_SPEED * 0.30)   # Slight turn: moderate curve (diff = 70% BASE_SPEED)
+
 SHARP_OUTER_SPEED  = BASE_SPEED
-SHARP_INNER_SPEED  = -int(BASE_SPEED * 1.00)  # e.g., -250 deg/s full pivot spin (increased turn sharpness)
-REVERSE_SPEED      = -int(BASE_SPEED * 0.70)  # e.g., -175 deg/s
+SHARP_INNER_SPEED  = -int(BASE_SPEED * 0.85)  # Sharp turn: aggressive pivot spin (diff = 185% BASE_SPEED)
+
+REVERSE_SPEED      = -int(BASE_SPEED * 0.70)  # Reverse speed
 
 # Action Speed Tuples (Left Motor Speed, Right Motor Speed) in deg/s.
 # Direction-dependent entries are filled in by set_direction() below.
@@ -114,18 +118,18 @@ def set_direction(direction, edge=None):
 
     if not INVERT_TURNS:
         # White on the right (CW+OUTER / CCW+INNER): White -> Turn Left, Black -> Turn Right
-        ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (MICRO_INNER_SPEED, FORWARD_SPEED)
+        ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (MICRO_INNER_SPEED, MICRO_OUTER_SPEED)
         ACTION_SPEEDS[ACTION_SLIGHT_LEFT]  = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_LEFT]   = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
-        ACTION_SPEEDS[ACTION_MICRO_RIGHT]  = (FORWARD_SPEED, MICRO_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_MICRO_RIGHT]  = (MICRO_OUTER_SPEED, MICRO_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SLIGHT_RIGHT] = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_RIGHT]  = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
     else:
         # White on the left (CCW+OUTER / CW+INNER): mirrored left/right tuples
-        ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (FORWARD_SPEED, MICRO_INNER_SPEED)
+        ACTION_SPEEDS[ACTION_MICRO_LEFT]   = (MICRO_OUTER_SPEED, MICRO_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SLIGHT_LEFT]  = (SLIGHT_OUTER_SPEED, SLIGHT_INNER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_LEFT]   = (SHARP_OUTER_SPEED, SHARP_INNER_SPEED)
-        ACTION_SPEEDS[ACTION_MICRO_RIGHT]  = (MICRO_INNER_SPEED, FORWARD_SPEED)
+        ACTION_SPEEDS[ACTION_MICRO_RIGHT]  = (MICRO_INNER_SPEED, MICRO_OUTER_SPEED)
         ACTION_SPEEDS[ACTION_SLIGHT_RIGHT] = (SLIGHT_INNER_SPEED, SLIGHT_OUTER_SPEED)
         ACTION_SPEEDS[ACTION_SHARP_RIGHT]  = (SHARP_INNER_SPEED, SHARP_OUTER_SPEED)
 
@@ -144,4 +148,4 @@ TURN_180_MS    = 5000  # spin duration for ~180 degrees
 
 # Non-RL Reflex / Hardware Parameters
 OBSTACLE_DISTANCE_THRESHOLD = 20  # cm / percentage distance threshold for IR sensor
-DEFAULT_STEP_TIME_MS = 20         # Action execution duration (20ms = 50Hz fast control loop)
+DEFAULT_STEP_TIME_MS = 5          # Action execution duration (5ms step delay)
