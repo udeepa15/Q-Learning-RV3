@@ -15,7 +15,7 @@ import subprocess
 
 EV3_HOST = sys.argv[1] if len(sys.argv) > 1 else "ev3dev.local"
 EV3_USER = "robot"
-REMOTE_PROJECT_DIR = "/home/robot/ev3_rl_project"
+REMOTE_PROJECT_DIR = "/home/robot/Q-Learning-RV3"
 
 LOCAL_MODELS_DIR = os.path.join(".", "models")
 os.makedirs(LOCAL_MODELS_DIR, exist_ok=True)

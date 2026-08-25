@@ -56,13 +56,26 @@ def list_saved_q_tables(models_dir="models"):
     return [models_dir + "/" + f for f in filenames]
 
 
+def delete_q_table(path):
+    """MicroPython safe file delete."""
+    try:
+        os.remove(path)
+        print("[Evaluate] Deleted Q-table: {}".format(path))
+        return True
+    except Exception as e:
+        print("[Evaluate] ERROR: Could not delete {}: {}".format(path, e))
+        return False
+
+
 def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
     """
-    Prompts the user to pick which saved Q-table to load for evaluation.
+    Prompts the user to pick which saved Q-table to load for evaluation, with
+    the option to clean up (delete) old/unwanted tables from the list first.
       - UP/DOWN Buttons : Browse saved Q-tables (most recent first)
       - CENTER Button   : Select the highlighted Q-table
+      - LEFT Button     : Delete the highlighted Q-table (press twice to confirm)
     Supports EV3 brick button menu and terminal input fallback for simulator mode.
-    Returns the chosen file path, or default_path if none are found.
+    Returns the chosen file path, or default_path if none are found/left.
     """
     candidates = list_saved_q_tables()
     if not candidates:
@@ -84,6 +97,7 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
     if has_buttons:
         from pybricks.parameters import Button
         index = 0
+        pending_delete = False
 
         def show_current():
             print("\n==================================================")
@@ -91,6 +105,7 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
             print("==================================================")
             print(" [{}/{}] {}".format(index + 1, len(candidates), candidates[index]))
             print(" -> UP/DOWN Button : Browse    CENTER Button : Select")
+            print(" -> LEFT Button    : Delete (press twice to confirm)")
             print("==================================================\n")
 
         show_current()
@@ -98,6 +113,7 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
             pressed = robot.ev3.buttons.pressed()
             if Button.UP in pressed:
                 index = (index - 1) % len(candidates)
+                pending_delete = False
                 try:
                     robot.ev3.speaker.beep(frequency=900, duration=80)
                 except Exception:
@@ -106,12 +122,36 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
                 wait(300)
             elif Button.DOWN in pressed:
                 index = (index + 1) % len(candidates)
+                pending_delete = False
                 try:
                     robot.ev3.speaker.beep(frequency=900, duration=80)
                 except Exception:
                     pass
                 show_current()
                 wait(300)
+            elif Button.LEFT in pressed:
+                if not pending_delete:
+                    pending_delete = True
+                    try:
+                        robot.ev3.speaker.beep(frequency=400, duration=150)
+                    except Exception:
+                        pass
+                    print("[Evaluate] Press LEFT again to DELETE '{}', or UP/DOWN to cancel.".format(candidates[index]))
+                    wait(400)
+                else:
+                    try:
+                        robot.ev3.speaker.beep(frequency=300, duration=400)
+                    except Exception:
+                        pass
+                    delete_q_table(candidates[index])
+                    candidates.pop(index)
+                    pending_delete = False
+                    if not candidates:
+                        print("[Evaluate] No Q-tables remain. Falling back to {}.".format(default_path))
+                        return default_path
+                    index = index % len(candidates)
+                    show_current()
+                    wait(400)
             elif Button.CENTER in pressed:
                 try:
                     robot.ev3.speaker.beep(frequency=1200, duration=200)
@@ -122,19 +162,38 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
                 return candidates[index]
             wait(100)
     else:
-        print("\n==================================================")
-        print("         SELECT Q-TABLE FOR EVALUATION             ")
-        print("==================================================")
-        for i, path in enumerate(candidates):
-            print(" {}. {}".format(i + 1, path))
-        print("==================================================")
-        try:
-            choice = input("Enter number [1-{}] (default: 1 = most recent): ".format(len(candidates))).strip()
+        while True:
+            print("\n==================================================")
+            print("         SELECT Q-TABLE FOR EVALUATION             ")
+            print("==================================================")
+            for i, path in enumerate(candidates):
+                print(" {}. {}".format(i + 1, path))
+            print("==================================================")
+            try:
+                choice = input(
+                    "Enter number [1-{}] to evaluate, or 'd<number>' to delete (e.g. d2) (default: 1): ".format(len(candidates))
+                ).strip()
+            except (EOFError, RuntimeError):
+                print("[Evaluate] Non-interactive environment. Using most recent Q-table: {}".format(candidates[0]))
+                return candidates[0]
+
+            if choice[:1] in ("d", "D") and choice[1:].isdigit() and 1 <= int(choice[1:]) <= len(candidates):
+                del_index = int(choice[1:]) - 1
+                del_path = candidates[del_index]
+                try:
+                    confirm = input("Delete '{}'? [y/N]: ".format(del_path)).strip().lower()
+                except (EOFError, RuntimeError):
+                    confirm = "n"
+                if confirm == "y":
+                    delete_q_table(del_path)
+                    candidates.pop(del_index)
+                    if not candidates:
+                        print("[Evaluate] No Q-tables remain. Falling back to {}.".format(default_path))
+                        return default_path
+                continue
+
             if choice.isdigit() and 1 <= int(choice) <= len(candidates):
                 return candidates[int(choice) - 1]
-            return candidates[0]
-        except (EOFError, RuntimeError):
-            print("[Evaluate] Non-interactive environment. Using most recent Q-table: {}".format(candidates[0]))
             return candidates[0]
 
 
