@@ -65,7 +65,7 @@ def confirm_correct_edge(robot):
         robot.turn_direct(back[0], back[1], 100)
         intensity = robot.read_intensity()
         if not crossed_white:
-            if intensity >= settings.LIGHT_DRIFT_WHITE_THRESH_8:
+            if intensity >= settings.PERFECT_EDGE_HIGH_8:
                 crossed_white = True
         elif is_on_edge(intensity):
             robot.stop()
@@ -109,7 +109,7 @@ def spiral_search_for_edge(robot, max_steps=45):
         robot.turn_direct(ls, rs, 80)
         intensity = robot.read_intensity()
         
-        if is_on_edge(intensity) or intensity >= settings.LIGHT_DRIFT_WHITE_THRESH_8:
+        if is_on_edge(intensity) or intensity >= settings.PERFECT_EDGE_HIGH_8:
             robot.stop()
             print("[Reflex] Track edge refound during spiral search at step {} (intensity={:.1f})!".format(step + 1, intensity))
             return True
@@ -247,10 +247,10 @@ def save_calibration(filepath="models/calibration.json"):
         "TOTALLY_LOST_THRESHOLD": settings.TOTALLY_LOST_THRESHOLD,
         "PERFECT_EDGE_HIGH_8": settings.PERFECT_EDGE_HIGH_8,
         "PERFECT_EDGE_LOW_8": settings.PERFECT_EDGE_LOW_8,
-        "LIGHT_DRIFT_WHITE_THRESH_8": settings.LIGHT_DRIFT_WHITE_THRESH_8,
         "MEDIUM_DRIFT_WHITE_THRESH_8": settings.MEDIUM_DRIFT_WHITE_THRESH_8,
         "PURE_WHITE_THRESHOLD_8": settings.PURE_WHITE_THRESHOLD_8,
-        "DRIFT_BLACK_THRESHOLD_8": settings.DRIFT_BLACK_THRESHOLD_8
+        "DRIFT_BLACK_THRESHOLD_8": settings.DRIFT_BLACK_THRESHOLD_8,
+        "HEAVY_DRIFT_BLACK_THRESHOLD_8": settings.HEAVY_DRIFT_BLACK_THRESHOLD_8
     }
 
     try:
@@ -388,12 +388,16 @@ def calibrate_color_sensor(robot):
     upper_span = white_val - settings.PERFECT_EDGE_HIGH_8
     lower_span = settings.PERFECT_EDGE_LOW_8 - black_val
 
+    # White side and black side are each split into thirds (Light/Medium/Pure and
+    # Drift/Heavy Drift/Pure), symmetric around the edge, so a deeper drift on
+    # either side earns a proportionally stronger turn.
     step_w = upper_span / 3.0
-    settings.LIGHT_DRIFT_WHITE_THRESH_8  = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 1)
-    settings.MEDIUM_DRIFT_WHITE_THRESH_8 = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 2)
-    settings.PURE_WHITE_THRESHOLD_8      = int(white_val - step_w * 0.3)
+    settings.MEDIUM_DRIFT_WHITE_THRESH_8 = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 1)
+    settings.PURE_WHITE_THRESHOLD_8      = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 2)
 
-    settings.DRIFT_BLACK_THRESHOLD_8   = int(black_val + lower_span * 0.4)
+    step_b = lower_span / 3.0
+    settings.DRIFT_BLACK_THRESHOLD_8       = int(settings.PERFECT_EDGE_LOW_8 - step_b * 1)
+    settings.HEAVY_DRIFT_BLACK_THRESHOLD_8 = int(settings.PERFECT_EDGE_LOW_8 - step_b * 2)
 
     # Save calibrated thresholds to models/calibration.json
     save_calibration()
@@ -407,14 +411,14 @@ def calibrate_color_sensor(robot):
     print("   -> Pure Black Surface : {:.1f}".format(black_val))
     print("--------------------------------------------------")
     print(" Computed 8-State Intensity Thresholds:")
-    print("   -> State 0 (Pure White)   : Intensity >= {}".format(settings.PURE_WHITE_THRESHOLD_8))
-    print("   -> State 1 (Medium Drift) : {} <= Intensity < {}".format(settings.MEDIUM_DRIFT_WHITE_THRESH_8, settings.PURE_WHITE_THRESHOLD_8))
-    print("   -> State 2 (Light Drift)  : {} <= Intensity < {}".format(settings.LIGHT_DRIFT_WHITE_THRESH_8, settings.MEDIUM_DRIFT_WHITE_THRESH_8))
-    print("   -> State 3 (Micro Drift)  : {} <= Intensity < {}".format(settings.PERFECT_EDGE_HIGH_8, settings.LIGHT_DRIFT_WHITE_THRESH_8))
-    print("   -> State 4 (PERFECT EDGE) : {} <= Intensity < {} [FORWARD DEADBAND]".format(settings.PERFECT_EDGE_LOW_8, settings.PERFECT_EDGE_HIGH_8))
-    print("   -> State 5 (Drift Black)  : {} <= Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8, settings.PERFECT_EDGE_LOW_8))
-    print("   -> State 6 (Pure Black)   : Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8))
-    print("   -> State 7 (Totally Lost) : Intensity < {} (for {} steps)".format(settings.TOTALLY_LOST_THRESHOLD, settings.TOTALLY_LOST_CONSECUTIVE_STEPS))
+    print("   -> State 0 (Pure White)      : Intensity >= {}".format(settings.PURE_WHITE_THRESHOLD_8))
+    print("   -> State 1 (Medium Drift)    : {} <= Intensity < {}".format(settings.MEDIUM_DRIFT_WHITE_THRESH_8, settings.PURE_WHITE_THRESHOLD_8))
+    print("   -> State 2 (Light Drift)     : {} <= Intensity < {}".format(settings.PERFECT_EDGE_HIGH_8, settings.MEDIUM_DRIFT_WHITE_THRESH_8))
+    print("   -> State 3 (PERFECT EDGE)    : {} <= Intensity < {} [FORWARD DEADBAND]".format(settings.PERFECT_EDGE_LOW_8, settings.PERFECT_EDGE_HIGH_8))
+    print("   -> State 4 (Drift Black)     : {} <= Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8, settings.PERFECT_EDGE_LOW_8))
+    print("   -> State 5 (Heavy Drift Blk) : {} <= Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8, settings.DRIFT_BLACK_THRESHOLD_8))
+    print("   -> State 6 (Pure Black)      : Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8))
+    print("   -> State 7 (Totally Lost)    : Intensity < {} (for {} steps)".format(settings.TOTALLY_LOST_THRESHOLD, settings.TOTALLY_LOST_CONSECUTIVE_STEPS))
     print("==================================================")
     print(" -> PRESS CENTER BUTTON TO CONFIRM & START TRAINING")
     print("==================================================\n")

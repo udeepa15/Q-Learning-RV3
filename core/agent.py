@@ -31,20 +31,21 @@ class QLearningAgent:
         # Initialize Q-table matrix with 5-State heuristic values
         self.q_table = self._initialize_q_table()
 
-    def _initialize_q_table(self):  
+    def _initialize_q_table(self):
         """
         Injects clean initial Q-values (0.0 and 5.0) for 8-State, 8-Action Clockwise line following:
         Actions: [0: FWD, 1: M_LFT, 2: S_LFT, 3: SH_LFT, 4: M_RGT, 5: S_RGT, 6: SH_RGT, 7: REV]
+        3 white-side and 3 black-side drift tiers are symmetric around the edge.
         """
         return [
-            [0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0],  # Row 0: Pure White   -> Sharp LFT (5.0)
-            [0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 1: Medium Drift -> Slight LFT (5.0)
-            [0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 2: Light Drift  -> Micro LFT (5.0)
-            [0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 3: Micro Drift  -> Micro LFT (5.0)
-            [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 4: Perfect Edge -> Drive FWD (5.0)
-            [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0],  # Row 5: Drift Black  -> Micro RGT (5.0)
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0],  # Row 6: Pure Black   -> Sharp RGT (5.0)
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0]   # Row 7: Lost / IR    -> Reverse (5.0)
+            [0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0],  # Row 0: Pure White        -> Sharp LFT (5.0)
+            [0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 1: Medium Drift      -> Slight LFT (5.0)
+            [0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 2: Light Drift       -> Micro LFT (5.0)
+            [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 3: Perfect Edge      -> Drive FWD (5.0)
+            [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0],  # Row 4: Drift Black       -> Micro RGT (5.0)
+            [0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0],  # Row 5: Heavy Drift Black -> Slight RGT (5.0)
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0],  # Row 6: Pure Black        -> Sharp RGT (5.0)
+            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0]   # Row 7: Lost / IR         -> Reverse (5.0)
         ]
 
     def choose_action(self, state, epsilon):
@@ -112,8 +113,8 @@ class QLearningAgent:
         """
         action_names = ["FWD", "M_LFT", "S_LFT", "SH_LFT", "M_RGT", "S_RGT", "SH_RGT", "REV"]
         state_names = [
-            "Pure White  ", "Med Drift W ", "Lt Drift W  ", "Micro DriftW",
-            "Edge        ", "Drift Black ", "Pure Black  ", "Lost/IR     "
+            "Pure White  ", "Med Drift W ", "Lt Drift W  ",
+            "Edge        ", "Drift Black ", "Heavy DriftB", "Pure Black  ", "Lost/IR     "
         ]
 
 

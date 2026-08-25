@@ -19,7 +19,7 @@ except ImportError:
     PORT_IR_SENSOR = "Port.S4"
 
 # Reinforcement Learning Hyperparameters
-ALPHA = 0.2            # Learning rate (smoothed for stable convergence)
+ALPHA = 0.1            # Learning rate (reduced from 0.2 for slower, more stable convergence)
 GAMMA = 0.7            # Discount factor
 
 
@@ -27,20 +27,25 @@ EPSILON_START = 0.3    # Initial exploration rate
 EPSILON_DECAY = 0.97   # Exploration decay per episode
 EPSILON_MIN = 0.01     # Minimum exploration rate
 
+# Training Loop Duration (per training session, started via train.py)
+NUM_EPISODES = 100            # Episodes per training session (increased from 40)
+MAX_STEPS_PER_EPISODE = 100   # Max steps per episode (increased from 60)
+
 # 8-State Environment Intensity Values and Thresholds (Updated for calibrated surface readings)
 WHITE_INTENSITY = 24.1
 BLACK_INTENSITY = 2.5
 EDGE_INTENSITY = 11.1
 
-# Intensity Thresholds for 8 States (With Edge Deadband to Stop Penguin Waddling)
+# Intensity Thresholds for 8 States: 3 symmetric drift tiers on each side of the
+# edge deadband (Light/Medium/Pure) + Edge + Lost (With Edge Deadband to Stop Penguin Waddling)
 PURE_WHITE_THRESHOLD_8       = 23  # State 0: Pure White (>= 23)
 MEDIUM_DRIFT_WHITE_THRESH_8  = 20  # State 1: Medium Drift (20 <= Intensity < 23)
-LIGHT_DRIFT_WHITE_THRESH_8   = 17  # State 2: Light Drift (17 <= Intensity < 20)
-                                   # State 3: Micro Drift (14 <= Intensity < 17)
-PERFECT_EDGE_HIGH_8          = 14  # State 4: Edge High Bound
-PERFECT_EDGE_LOW_8           = 8   # State 4: Edge Low Bound -> Deadband (8 <= Intensity < 14)
-DRIFT_BLACK_THRESHOLD_8      = 4   # State 5: Drift Black (4 <= Intensity < 8)
-                                   # State 6: Pure Black (< 4)
+                                   # State 2: Light Drift (14 <= Intensity < 20)
+PERFECT_EDGE_HIGH_8          = 14  # State 3: Edge High Bound
+PERFECT_EDGE_LOW_8           = 8   # State 3: Edge Low Bound -> Deadband (8 <= Intensity < 14)
+DRIFT_BLACK_THRESHOLD_8      = 4   # State 4: Drift Black (4 <= Intensity < 8)
+HEAVY_DRIFT_BLACK_THRESHOLD_8 = 2  # State 5: Heavy Drift Black (2 <= Intensity < 4)
+                                   # State 6: Pure Black (< 2)
 
 
 TOTALLY_LOST_THRESHOLD = 1          # State 7: Intensity < 1 considered deep off-track black
@@ -58,14 +63,14 @@ ACTION_SHARP_RIGHT  = 6
 ACTION_REVERSE      = 7
 
 NUM_ACTIONS = 8
-NUM_STATES = 8  # 7 Color States + 1 Lost/IR State
+NUM_STATES = 8  # 6 Drift States (3 White + 3 Black) + 1 Edge + 1 Lost/IR State
 
 
 # ----------------------------------------------------
 # ROBOT SPEED & DIRECTION CONTROL CONFIGURATION
 # ----------------------------------------------------
 # Base Drive Speed Parameter (deg/s) - Change this number to adjust overall robot speed!
-BASE_SPEED = 200
+BASE_SPEED = 300
 
 # Turn Direction Mode ("CW" for Clockwise, "CCW" for Counter-Clockwise)
 # Runtime-switchable via set_direction() -- used by the 180-degree obstacle turnaround.
@@ -87,10 +92,10 @@ MICRO_OUTER_SPEED  = BASE_SPEED
 MICRO_INNER_SPEED  = int(BASE_SPEED * 0.70)   # Micro turn: gentle curve (diff = 30% BASE_SPEED)
 
 SLIGHT_OUTER_SPEED = BASE_SPEED
-SLIGHT_INNER_SPEED = int(BASE_SPEED * 0.30)   # Slight turn: moderate curve (diff = 70% BASE_SPEED)
+SLIGHT_INNER_SPEED = int(BASE_SPEED * 0.40)   # Slight turn: moderate curve (diff = 70% BASE_SPEED)
 
 SHARP_OUTER_SPEED  = BASE_SPEED
-SHARP_INNER_SPEED  = -int(BASE_SPEED * 0.85)  # Sharp turn: aggressive pivot spin (diff = 185% BASE_SPEED)
+SHARP_INNER_SPEED  = -int(BASE_SPEED * 0.50)  # Sharp turn: aggressive pivot spin (diff = 185% BASE_SPEED)
 
 REVERSE_SPEED      = -int(BASE_SPEED * 0.70)  # Reverse speed
 

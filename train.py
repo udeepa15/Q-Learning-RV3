@@ -197,32 +197,47 @@ def select_model_initialization(robot, save_path, force_fresh=False):
         wait(100)
 
 
-def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_simulator=False, force_fresh=False):
+def train_agent(num_episodes=None, max_steps_per_episode=None, save_path=None,
+                 use_simulator=False, force_fresh=False, robot=None, agent=None):
     """
     Main RL Training loop for 8-State Q-Learning line follower.
     Supports interactive sensor calibration, model initialization prompt, retraining, and CSV metrics logging.
-    """
-    robot = RobotInterface(use_simulator=use_simulator)
 
-    # 1. Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge)
-    calibrate_color_sensor(robot)
-    
+    Pass an existing `robot` to reuse hardware across chained training sessions
+    (skips re-calibration). Pass an existing `agent` to keep training the same
+    in-memory Q-table across sessions (skips the load/fresh-start menu).
+    Returns (agent, robot) so callers can chain further sessions.
+    """
+    if num_episodes is None:
+        num_episodes = settings.NUM_EPISODES
+    if max_steps_per_episode is None:
+        max_steps_per_episode = settings.MAX_STEPS_PER_EPISODE
+
     if save_path is None:
         save_path = "models/cw_q_table_8state.pkl"
 
-    agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
+    if robot is None:
+        robot = RobotInterface(use_simulator=use_simulator)
+        # 1. Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge)
+        calibrate_color_sensor(robot)
+
     env = Environment()
 
-    # 2. Retraining vs Fresh Start Prompt Menu
-    use_saved_model = select_model_initialization(robot, save_path, force_fresh=force_fresh)
-    if use_saved_model:
-        try:
-            agent.load(save_path)
-            print("[Train] RETRAINING MODE: Successfully loaded existing Q-table from {}.".format(save_path))
-        except Exception as e:
-            print("[Train] Could not load saved Q-table ({}). Initializing with heuristic table.".format(e))
+    if agent is None:
+        agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
+
+        # 2. Retraining vs Fresh Start Prompt Menu
+        use_saved_model = select_model_initialization(robot, save_path, force_fresh=force_fresh)
+        if use_saved_model:
+            try:
+                agent.load(save_path)
+                print("[Train] RETRAINING MODE: Successfully loaded existing Q-table from {}.".format(save_path))
+            except Exception as e:
+                print("[Train] Could not load saved Q-table ({}). Initializing with heuristic table.".format(e))
+        else:
+            print("[Train] FRESH START MODE: Initialized agent with hardcoded heuristic Q-values.")
     else:
-        print("[Train] FRESH START MODE: Initialized agent with hardcoded heuristic Q-values.")
+        print("[Train] CONTINUING TRAINING: Reusing in-memory Q-table from the previous session.")
 
     epsilon = settings.EPSILON_START
     metrics_log = []
@@ -311,9 +326,137 @@ def train_agent(num_episodes=40, max_steps_per_episode=60, save_path=None, use_s
     except Exception as e:
         print("[Train] Error writing metrics CSV:", e)
 
-    return agent
+    return agent, robot
+
+
+def prompt_continue_or_stop_training(robot):
+    """
+    Prompts user after a training session completes:
+      - UP Button   : Continue Training (start another session)
+      - DOWN Button : Stop Training
+    Supports EV3 brick button menu and terminal input fallback for simulator mode.
+    """
+    has_buttons = False
+    if not robot.is_simulated and hasattr(robot, 'ev3') and robot.ev3 is not None:
+        try:
+            from pybricks.parameters import Button
+            has_buttons = True
+        except ImportError:
+            has_buttons = False
+
+    print("\n==================================================")
+    print("              CONTINUE TRAINING?                   ")
+    print("==================================================")
+    print(" -> Option 1 (UP Button / '1')   : CONTINUE Training")
+    print(" -> Option 2 (DOWN Button / '2') : STOP Training")
+    print("==================================================\n")
+
+    if has_buttons:
+        from pybricks.parameters import Button
+        print("[Train] Waiting for EV3 button press (UP=Continue, DOWN=Stop)...")
+        while True:
+            pressed = robot.ev3.buttons.pressed()
+            if Button.UP in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=1000, duration=150)
+                except Exception:
+                    pass
+                wait(500)
+                return True
+            elif Button.DOWN in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=500, duration=300)
+                except Exception:
+                    pass
+                wait(500)
+                return False
+            wait(100)
+    else:
+        try:
+            user_choice = input("Enter option [1=Continue, 2=Stop] (default: 2): ").strip()
+            return user_choice == "1"
+        except (EOFError, RuntimeError):
+            print("[Train] Non-interactive environment. Stopping training.")
+            return False
+
+
+def prompt_same_or_new_table(robot):
+    """
+    Prompts user (after choosing to continue) whether to:
+      - UP Button   : Keep training the SAME Q-table (continues in-memory)
+      - DOWN Button : Train a NEW Q-table (fresh heuristic start, saved separately)
+    Returns True to keep the same table, False to start a new one.
+    """
+    has_buttons = False
+    if not robot.is_simulated and hasattr(robot, 'ev3') and robot.ev3 is not None:
+        try:
+            from pybricks.parameters import Button
+            has_buttons = True
+        except ImportError:
+            has_buttons = False
+
+    print("\n==================================================")
+    print("        SAME Q-TABLE OR NEW Q-TABLE?               ")
+    print("==================================================")
+    print(" -> Option 1 (UP Button / '1')   : SAME Q-table (keep training it)")
+    print(" -> Option 2 (DOWN Button / '2') : NEW Q-table (fresh heuristic start)")
+    print("==================================================\n")
+
+    if has_buttons:
+        from pybricks.parameters import Button
+        print("[Train] Waiting for EV3 button press (UP=Same Table, DOWN=New Table)...")
+        while True:
+            pressed = robot.ev3.buttons.pressed()
+            if Button.UP in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=1000, duration=150)
+                except Exception:
+                    pass
+                wait(500)
+                return True
+            elif Button.DOWN in pressed:
+                try:
+                    robot.ev3.speaker.beep(frequency=700, duration=150)
+                except Exception:
+                    pass
+                wait(500)
+                return False
+            wait(100)
+    else:
+        try:
+            user_choice = input("Enter option [1=Same Table, 2=New Table] (default: 1): ").strip()
+            return user_choice != "2"
+        except (EOFError, RuntimeError):
+            print("[Train] Non-interactive environment. Continuing same table.")
+            return True
 
 
 if __name__ == "__main__":
     target_file = sys.argv[1] if len(sys.argv) > 1 else None
-    train_agent(num_episodes=40, max_steps_per_episode=60, save_path=target_file)
+    save_path = target_file or "models/cw_q_table_8state.pkl"
+
+    session_agent = None
+    session_robot = None
+    force_fresh = False
+
+    while True:
+        session_agent, session_robot = train_agent(
+            save_path=save_path,
+            force_fresh=force_fresh,
+            robot=session_robot,
+            agent=session_agent,
+        )
+
+        if not prompt_continue_or_stop_training(session_robot):
+            print("[Train] Training session ended.")
+            break
+
+        if prompt_same_or_new_table(session_robot):
+            print("[Train] Continuing training on the SAME Q-table.")
+            force_fresh = False
+        else:
+            print("[Train] Starting a NEW Q-table for the next session.")
+            base_path = target_file or "models/cw_q_table_8state.pkl"
+            save_path = generate_dated_filename(base_path)
+            session_agent = None
+            force_fresh = True
