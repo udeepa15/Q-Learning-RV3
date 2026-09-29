@@ -287,7 +287,7 @@ def load_calibration(filepath="models/calibration.json"):
         return False
 
 
-def calibrate_color_sensor(robot):
+def calibrate_color_sensor(robot, start_label="TRAINING"):
     """
     Interactive color sensor calibration routine on EV3 brick:
       1. Pure White surface
@@ -298,13 +298,13 @@ def calibrate_color_sensor(robot):
     if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
         print("[Calibration] Simulator mode detected. Skipping interactive calibration.")
         load_calibration()
-        return
+        return False
 
     try:
         from pybricks.parameters import Button
     except ImportError:
         load_calibration()
-        return
+        return False
 
     def wait_for_center_button(prompt_text):
         print("\n==================================================")
@@ -353,7 +353,7 @@ def calibrate_color_sensor(robot):
             print("[Calibration] Skipped calibration. Loading saved thresholds or defaults.")
             load_calibration()
             wait(500)
-            return
+            return False
         wait(100)
 
     # 1. Pure White
@@ -370,7 +370,7 @@ def calibrate_color_sensor(robot):
         print("[Calibration] WARNING: Readings abnormal (White={:.1f}, Edge={:.1f}, Black={:.1f}). Using defaults.".format(
             white_val, edge_val, black_val))
         load_calibration()
-        return
+        return False
 
     # Update base intensities in settings
     settings.WHITE_INTENSITY = int(white_val)
@@ -420,7 +420,7 @@ def calibrate_color_sensor(robot):
     print("   -> State 6 (Pure Black)      : Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8))
     print("   -> State 7 (Totally Lost)    : Intensity < {} (for {} steps)".format(settings.TOTALLY_LOST_THRESHOLD, settings.TOTALLY_LOST_CONSECUTIVE_STEPS))
     print("==================================================")
-    print(" -> PRESS CENTER BUTTON TO CONFIRM & START TRAINING")
+    print(" -> PRESS CENTER BUTTON TO CONFIRM & START {}".format(start_label))
     print("==================================================\n")
 
     # Hold execution until user presses CENTER button
@@ -435,5 +435,4 @@ def calibrate_color_sensor(robot):
             break
         wait(100)
 
-
-
+    return True

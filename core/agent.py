@@ -22,14 +22,22 @@ class QLearningAgent:
     Supports 8-State Heuristic Initialization for Clockwise line following.
     """
     def __init__(self, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
-                 alpha=settings.ALPHA, gamma=settings.GAMMA):
+                 alpha=settings.ALPHA, gamma=settings.GAMMA, zero_init=False):
         self.n_states = n_states
         self.n_actions = n_actions
         self.alpha = alpha
         self.gamma = gamma
 
-        # Initialize Q-table matrix with 5-State heuristic values
-        self.q_table = self._initialize_q_table()
+        if zero_init:
+            self.q_table = [[0.0] * n_actions for _ in range(n_states)]
+        else:
+            self.q_table = self._initialize_q_table()
+
+    def snapshot(self):
+        return [row[:] for row in self.q_table]
+
+    def restore(self, snapshot):
+        self.q_table = [row[:] for row in snapshot]
 
     def _initialize_q_table(self):
         """
@@ -48,35 +56,44 @@ class QLearningAgent:
             [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0]   # Row 7: Lost / IR         -> Reverse (5.0)
         ]
 
-    def choose_action(self, state, epsilon):
+    def choose_action(self, state, epsilon, allowed_actions=None):
         """
-        Epsilon-greedy action selection.
+        Epsilon-greedy action selection, optionally restricted to a subset of columns.
         """
+        if allowed_actions is None:
+            allowed_actions = range(self.n_actions)
+        allowed_actions = list(allowed_actions)
+
         if random.random() < epsilon:
             # Exploration: choose a random action
-            return random.randrange(self.n_actions)
-        else:
-            # Exploitation: choose action with maximum Q-value for current state
-            q_row = self.q_table[state]
-            max_q = q_row[0]
-            best_actions = [0]
+            return random.choice(allowed_actions)
 
-            for action in range(1, self.n_actions):
-                if q_row[action] > max_q:
-                    max_q = q_row[action]
-                    best_actions = [action]
-                elif q_row[action] == max_q:
-                    best_actions.append(action)
+        # Exploitation: choose action with maximum Q-value for current state
+        q_row = self.q_table[state]
+        max_q = q_row[allowed_actions[0]]
+        best_actions = [allowed_actions[0]]
 
-            # Randomly break ties among actions with equal max Q-value
-            return random.choice(best_actions)
+        for action in allowed_actions[1:]:
+            if q_row[action] > max_q:
+                max_q = q_row[action]
+                best_actions = [action]
+            elif q_row[action] == max_q:
+                best_actions.append(action)
 
-    def update(self, state, action, reward, next_state):
+        # Randomly break ties among actions with equal max Q-value
+        return random.choice(best_actions)
+
+    def update(self, state, action, reward, next_state, next_actions=None):
         """
         Updates Q-value using Bellman Equation:
         Q(s, a) = Q(s, a) + alpha * [reward + gamma * max_a' Q(s', a') - Q(s, a)]
+        The max over a' can be restricted to next_actions.
         """
-        max_next_q = max(self.q_table[next_state])
+        next_row = self.q_table[next_state]
+        if next_actions is None:
+            max_next_q = max(next_row)
+        else:
+            max_next_q = max(next_row[a] for a in next_actions)
         current_q = self.q_table[state][action]
         new_q = current_q + self.alpha * (reward + self.gamma * max_next_q - current_q)
         self.q_table[state][action] = new_q

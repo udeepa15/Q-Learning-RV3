@@ -107,6 +107,21 @@ class Environment:
             return 0.0
 
 
+    def progress_reward(self, state, next_state):
+        """
+        Outcome-based shaping: rewards moving toward the edge and penalises
+        drifting away, so Q-values reflect what an action actually did.
+        """
+        def distance(s):
+            return 4 if s == STATE_TOTALLY_LOST else abs(s - STATE_PERFECT_EDGE)
+
+        delta = distance(state) - distance(next_state)
+        if delta > 0:
+            return settings.PROGRESS_REWARD
+        if delta < 0:
+            return -settings.PROGRESS_REWARD
+        return 0.0
+
     def reset(self):
         """
         Resets lost step counters for a new episode.

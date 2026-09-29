@@ -1,8 +1,13 @@
 #!/usr/bin/env pybricks-micropython
 """
-Training Script for EV3 Q-Learning Line Follower Agent.
-Supports EV3 button selection for CW/CCW track direction, interactive sensor calibration,
-retraining, and end-of-training model save/discard options (with date stamping).
+Phased Training Script for EV3 Q-Learning Line Follower Agent.
+
+The Q-table starts from all zeros and is trained in two phases:
+  1. STRAIGHT (~4s episodes): rows Light Drift White / Edge / Drift Black,
+     columns FWD / Slight LFT / Slight RGT.
+  2. TURN (~5s episodes): the remaining rows and columns.
+Each episode is started with the CENTER button; afterwards the user keeps or
+discards the episode's updates and either runs another episode or finishes the phase.
 """
 
 import sys
@@ -19,17 +24,34 @@ if current_dir and current_dir not in sys.path:
     sys.path.append(current_dir)
 
 try:
-    from pybricks.tools import wait
+    from pybricks.tools import wait, StopWatch
 except ImportError:
     import time
+
     def wait(ms):
         time.sleep(ms / 1000.0)
+
+    class StopWatch:
+        def __init__(self):
+            self._start = time.time()
+
+        def time(self):
+            return int((time.time() - self._start) * 1000)
 
 from config import settings
 from hardware.robot import RobotInterface
 from hardware.reflexes import hardcoded_obstacle_avoidance, calibrate_color_sensor
 from core.agent import QLearningAgent
-from core.environment import Environment, STATE_TOTALLY_LOST
+from core.environment import (Environment, STATE_PERFECT_EDGE, STATE_LIGHT_DRIFT_WHITE,
+                              STATE_DRIFT_BLACK, STATE_TOTALLY_LOST)
+
+PHASE_STRAIGHT = "STRAIGHT"
+PHASE_TURN = "TURN"
+
+PHASES = {
+    PHASE_STRAIGHT: (settings.STRAIGHT_STATES, settings.STRAIGHT_ACTIONS, settings.STRAIGHT_EPISODE_MS),
+    PHASE_TURN: (settings.TURN_STATES, settings.TURN_ACTIONS, settings.TURN_EPISODE_MS),
+}
 
 
 def file_exists(filename):
@@ -39,6 +61,16 @@ def file_exists(filename):
         return True
     except Exception:
         return False
+
+
+def ensure_parent_dir(path):
+    if "/" in path:
+        model_dir = path.rsplit("/", 1)[0]
+        if model_dir:
+            try:
+                os.mkdir(model_dir)
+            except Exception:
+                pass
 
 
 def generate_dated_filename(base_path):
@@ -57,406 +89,252 @@ def generate_dated_filename(base_path):
         return "{}_{}".format(base_path, date_str)
 
 
+def has_ev3_buttons(robot):
+    if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
+        return False
+    try:
+        from pybricks.parameters import Button  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def wait_for_choice(robot, title, options):
+    """
+    Shows a menu and blocks until one option is chosen.
+    options: list of (button_name, key_char, result, label).
+    Uses EV3 buttons on hardware, terminal input in simulator mode.
+    The first option is the terminal default.
+    """
+    print("\n==================================================")
+    print(" " + title)
+    print("==================================================")
+    for button_name, key_char, _, label in options:
+        print(" -> {} Button / '{}' : {}".format(button_name, key_char, label))
+    print("==================================================\n")
+
+    if has_ev3_buttons(robot):
+        from pybricks.parameters import Button
+        buttons = [(getattr(Button, name), result) for name, _, result, _ in options]
+        while True:
+            pressed = robot.ev3.buttons.pressed()
+            for button, result in buttons:
+                if button in pressed:
+                    try:
+                        robot.ev3.speaker.beep(frequency=1000, duration=120)
+                    except Exception:
+                        pass
+                    while button in robot.ev3.buttons.pressed():
+                        wait(50)
+                    wait(200)
+                    return result
+            wait(50)
+
+    try:
+        user_choice = input("Enter option (default '{}'): ".format(options[0][1])).strip()
+    except (EOFError, RuntimeError):
+        user_choice = ""
+    for _, key_char, result, _ in options:
+        if user_choice == key_char:
+            return result
+    return options[0][2]
+
+
 def prompt_save_q_table(agent, save_path, robot):
     """
     Prompts user at the end of training to:
       1. Save Q-table to default path
       2. Save Q-table with current date-time stamp in models directory
       3. Discard Q-table (do not save)
-    Supports EV3 brick button menu and terminal input fallback for simulator mode.
     """
     dated_path = generate_dated_filename(save_path)
 
-    has_buttons = False
-    if not robot.is_simulated and hasattr(robot, 'ev3') and robot.ev3 is not None:
-        try:
-            from pybricks.parameters import Button
-            has_buttons = True
-        except ImportError:
-            has_buttons = False
-
-    print("\n==================================================")
-    print("           TRAINING FINISHED: SAVE MENU            ")
-    print("==================================================")
-    print(" Choose how to save the updated Q-table:")
-    print(" -> Option 1 (UP Button / '1')    : Default Path ({})".format(save_path))
-    print(" -> Option 2 (RIGHT Button / '2') : Date-Stamped ({})".format(dated_path))
-    print(" -> Option 3 (DOWN Button / '3')  : DISCARD (Do not save)")
-    print("==================================================\n")
-
-    chosen_action = None
-
-    if has_buttons:
-        from pybricks.parameters import Button
-        print("[Train] Waiting for EV3 button press (UP=Default, RIGHT=Date-Stamped, DOWN=Discard)...")
-        while True:
-            pressed = robot.ev3.buttons.pressed()
-            if Button.UP in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=1000, duration=150)
-                except Exception:
-                    pass
-                chosen_action = 'default'
-                wait(500)
-                break
-            elif Button.RIGHT in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=1200, duration=150)
-                except Exception:
-                    pass
-                chosen_action = 'dated'
-                wait(500)
-                break
-            elif Button.DOWN in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=500, duration=300)
-                except Exception:
-                    pass
-                chosen_action = 'discard'
-                wait(500)
-                break
-            wait(100)
-    else:
-        try:
-            user_choice = input("Enter option [1=Default, 2=Date-Stamped, 3=Discard] (default: 1): ").strip()
-            if user_choice == "2":
-                chosen_action = 'dated'
-            elif user_choice == "3":
-                chosen_action = 'discard'
-            else:
-                chosen_action = 'default'
-        except (EOFError, RuntimeError):
-            print("[Train] Non-interactive environment. Saving to default path.")
-            chosen_action = 'default'
+    chosen_action = wait_for_choice(robot, "TRAINING FINISHED: SAVE MENU", [
+        ("UP", "1", 'default', "Default Path ({})".format(save_path)),
+        ("RIGHT", "2", 'dated', "Date-Stamped ({})".format(dated_path)),
+        ("DOWN", "3", 'discard', "DISCARD (Do not save)"),
+    ])
 
     if chosen_action == 'discard':
         print("\n[Train] DISCARDED: Q-table updates were NOT saved.")
         return None
 
     target_path = dated_path if chosen_action == 'dated' else save_path
-
-    if "/" in target_path:
-        model_dir = target_path.rsplit("/", 1)[0]
-        if model_dir:
-            try:
-                os.mkdir(model_dir)
-            except Exception:
-                pass
-
+    ensure_parent_dir(target_path)
     agent.save(target_path)
     print("\n[Train] SUCCESS: Updated Q-table saved to:", target_path)
     return target_path
 
 
-def select_model_initialization(robot, save_path, force_fresh=False):
+def fallback_action(agent, state, phase):
     """
-    Prompts the user on EV3 brick before training starts:
-      - UP Button   : Continue training previously saved Q-table
-      - DOWN Button : Restart fresh from hardcoded heuristic table
+    Action for rows the current phase does not train (no Q-update is made).
+    STRAIGHT: turn rows are still untrained, so steer with the nearest straight row.
+    TURN: straight rows use their already-trained straight policy.
     """
-    if force_fresh or not file_exists(save_path):
-        print("[Train] No previously saved Q-table found at {}. Initializing fresh from hardcoded heuristic table.".format(save_path))
-        return False  # False = start fresh from heuristic table
-
-    if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
-        print("[Train] Simulator mode. Defaulting to continuing previous saved model: {}".format(save_path))
-        return True
-
-    try:
-        from pybricks.parameters import Button
-    except ImportError:
-        return True
-
-    print("\n==================================================")
-    print("        Q-TABLE INITIALIZATION MENU               ")
-    print("==================================================")
-    print(" Previously saved model detected: {}".format(save_path))
-    print(" -> Press UP Button   : CONTINUE Training Previous Saved Model")
-    print(" -> Press DOWN Button : RESTART Fresh (Hardcoded Heuristic Table)")
-    print(" (Waiting for button press...)")
-    print("==================================================\n")
-
-    while True:
-        pressed = robot.ev3.buttons.pressed()
-        if Button.UP in pressed:
-            try:
-                robot.ev3.speaker.beep(frequency=1000, duration=150)
-            except Exception:
-                pass
-            print("[Train] Button Pressed: UP -> Continuing training previous saved model.")
-            wait(500)
-            return True
-        elif Button.DOWN in pressed:
-            try:
-                robot.ev3.speaker.beep(frequency=600, duration=150)
-            except Exception:
-                pass
-            print("[Train] Button Pressed: DOWN -> Restarting fresh from hardcoded heuristic table.")
-            wait(500)
-            return False
-        wait(100)
+    if phase == PHASE_STRAIGHT:
+        if state == STATE_TOTALLY_LOST:
+            return settings.ACTION_REVERSE
+        proxy = STATE_LIGHT_DRIFT_WHITE if state < STATE_PERFECT_EDGE else STATE_DRIFT_BLACK
+        return agent.choose_action(proxy, 0.0, settings.STRAIGHT_ACTIONS)
+    return agent.choose_action(state, 0.0, settings.STRAIGHT_ACTIONS)
 
 
-def train_agent(num_episodes=None, max_steps_per_episode=None, save_path=None,
-                 use_simulator=False, force_fresh=False, robot=None, agent=None):
+def run_episode(robot, env, agent, phase, epsilon):
     """
-    Main RL Training loop for 8-State Q-Learning line follower.
-    Supports interactive sensor calibration, model initialization prompt, retraining, and CSV metrics logging.
-
-    Pass an existing `robot` to reuse hardware across chained training sessions
-    (skips re-calibration). Pass an existing `agent` to keep training the same
-    in-memory Q-table across sessions (skips the load/fresh-start menu).
-    Returns (agent, robot) so callers can chain further sessions.
+    Runs one time-limited episode. Only (row, column) pairs owned by the phase are updated.
+    Returns (updates, total_reward, off_phase_steps, lost_steps).
     """
-    if num_episodes is None:
-        num_episodes = settings.NUM_EPISODES
-    if max_steps_per_episode is None:
-        max_steps_per_episode = settings.MAX_STEPS_PER_EPISODE
+    phase_states, phase_actions, duration_ms = PHASES[phase]
 
-    if save_path is None:
-        save_path = "models/cw_q_table_8state.pkl"
+    env.reset()
+    updates = 0
+    off_phase_steps = 0
+    lost_steps = 0
+    total_reward = 0.0
 
-    if robot is None:
-        robot = RobotInterface(use_simulator=use_simulator)
-        # 1. Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge)
-        calibrate_color_sensor(robot)
+    state = env.get_state(robot.read_intensity())
+    watch = StopWatch()
 
-    env = Environment()
+    while watch.time() < duration_ms:
+        if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
+            print("[Train] IR sensor triggered. Running obstacle reflex (no Q-update).")
+            hardcoded_obstacle_avoidance(robot)
+            state = env.get_state(robot.read_intensity())
+            continue
 
-    if agent is None:
-        agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
-
-        # 2. Retraining vs Fresh Start Prompt Menu
-        use_saved_model = select_model_initialization(robot, save_path, force_fresh=force_fresh)
-        if use_saved_model:
-            try:
-                agent.load(save_path)
-                print("[Train] RETRAINING MODE: Successfully loaded existing Q-table from {}.".format(save_path))
-            except Exception as e:
-                print("[Train] Could not load saved Q-table ({}). Initializing with heuristic table.".format(e))
+        learning = state in phase_states
+        if learning:
+            action = agent.choose_action(state, epsilon, phase_actions)
         else:
-            print("[Train] FRESH START MODE: Initialized agent with hardcoded heuristic Q-values.")
-    else:
-        print("[Train] CONTINUING TRAINING: Reusing in-memory Q-table from the previous session.")
+            action = fallback_action(agent, state, phase)
+            off_phase_steps += 1
 
-    epsilon = settings.EPSILON_START
-    metrics_log = []
+        robot.execute_action(action)
+        wait(settings.TRAIN_STEP_TIME_MS)
 
-    print("==================================================")
-    print("Starting Q-Learning Training (8-State Clockwise Mode)...")
-    print("Episodes: {}, Max Steps/Episode: {}".format(num_episodes, max_steps_per_episode))
-    print("Target Q-Table File: {}".format(save_path))
-    print("==================================================")
+        next_state = env.get_state(robot.read_intensity())
+        if next_state == STATE_TOTALLY_LOST:
+            lost_steps += 1
 
-    lost_state_id = STATE_TOTALLY_LOST
+        if learning:
+            reward = env.calculate_reward(state, action) + env.progress_reward(state, next_state)
+            agent.update(state, action, reward, next_state, settings.actions_for_state(next_state))
+            total_reward += reward
+            updates += 1
 
-    for episode in range(1, num_episodes + 1):
-        env.reset()
-        episode_reward = 0.0
-        hard_corrections = 0
-        fatal_off_track = False
-
-        for step in range(1, max_steps_per_episode + 1):
-            # RULE D: Non-RL Reflex Interrupt for Obstacle Avoidance
-            if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
-                print("[Train] Episode {}, Step {}: IR sensor triggered (<20cm). Skipping Q-update.".format(episode, step))
-                hardcoded_obstacle_avoidance(robot)
-                continue  # Skip Q-update for this step
-
-            # 1. Observe current state
-            intensity = robot.read_intensity()
-            state = env.get_state(intensity)
-
-            if state == lost_state_id:
-                fatal_off_track = True
-
-            # 2. Select action via Epsilon-Greedy policy
-            action = agent.choose_action(state, epsilon)
-
-            # Track hard corrections (Action 3: Sharp LFT, Action 6: Sharp RGT)
-            if action == settings.ACTION_SHARP_LEFT or action == settings.ACTION_SHARP_RIGHT:
-                hard_corrections += 1
-
-            # 3. Execute action
-            robot.execute_action(action)
-            wait(settings.DEFAULT_STEP_TIME_MS)
-
-            # 4. Observe next state and calculate reward
-            next_intensity = robot.read_intensity()
-            next_state = env.get_state(next_intensity)
-
-            if next_state == lost_state_id:
-                fatal_off_track = True
-
-            reward = env.calculate_reward(state, action)
-            episode_reward += reward
-
-            # 5. Q-table Bellman update
-            agent.update(state, action, reward, next_state)
-
-        # Decay exploration rate after each episode
-        epsilon = max(settings.EPSILON_MIN, epsilon * settings.EPSILON_DECAY)
-
-        # Lap completed if agent completes max_steps without triggering fatal off-track penalty
-        lap_completed = not fatal_off_track
-
-        # Append episode metrics: [episode_number, hard_corrections, lap_completed, total_reward]
-        metrics_log.append([episode, hard_corrections, lap_completed, episode_reward])
-
-        print("Episode {:2d}/{} completed | Corrections: {:2d} | Lap Completed: {} | Reward: {:6.1f} | Epsilon: {:.4f}".format(
-            episode, num_episodes, hard_corrections, lap_completed, episode_reward, epsilon))
-
-        # Dynamic Q-table snapshot display after each episode
-        agent.display_q_table()
+        state = next_state
 
     robot.stop()
+    return updates, total_reward, off_phase_steps, lost_steps
 
-    # Prompt user to save to default path, date-stamped path, or discard
-    prompt_save_q_table(agent, save_path, robot)
 
-    # Write metrics to CSV (MicroPython compatible file writer)
-    csv_filename = "training_metrics_cw_8state.csv"
+def run_phase(robot, env, agent, phase, metrics_log):
+    """
+    Interactive episode loop for one phase. Returns when the user chooses to save & finish.
+    """
+    duration_s = PHASES[phase][2] / 1000.0
+    epsilon = settings.PHASE_EPSILON_START
+    episode = 0
 
+    print("\n##################################################")
+    print(" {} PHASE ({:.0f}s episodes)".format(phase, duration_s))
+    print("##################################################")
+
+    while True:
+        episode += 1
+        wait_for_choice(robot, "{} episode {}: place robot, then START".format(phase, episode), [
+            ("CENTER", "", None, "Start episode (epsilon={:.3f})".format(epsilon)),
+        ])
+
+        before = agent.snapshot()
+        updates, total_reward, off_phase, lost = run_episode(robot, env, agent, phase, epsilon)
+
+        print("[Train] {} episode {} | Updates: {} | Reward: {:.1f} | Off-phase steps: {} | Lost steps: {}".format(
+            phase, episode, updates, total_reward, off_phase, lost))
+        agent.display_q_table()
+
+        choice = wait_for_choice(robot, "{} episode {} finished".format(phase, episode), [
+            ("UP", "1", 'next', "Keep updates, run NEXT episode"),
+            ("LEFT", "2", 'redo', "DISCARD this episode's updates, redo"),
+            ("DOWN", "3", 'save', "Keep updates, SAVE table and finish {} phase".format(phase)),
+        ])
+
+        if choice == 'redo':
+            agent.restore(before)
+            episode -= 1
+            print("[Train] Episode discarded. Q-table restored.")
+            continue
+
+        metrics_log.append([phase, episode, updates, total_reward, off_phase, lost, epsilon])
+        epsilon = max(settings.PHASE_EPSILON_MIN, epsilon * settings.PHASE_EPSILON_DECAY)
+
+        if choice == 'save':
+            return
+
+
+def write_metrics(metrics_log, csv_filename="training_metrics_phased.csv"):
     try:
         with open(csv_filename, 'w') as f:
-            f.write("episode,hard_corrections,lap_completed,total_reward\n")
+            f.write("phase,episode,updates,total_reward,off_phase_steps,lost_steps,epsilon\n")
             for row in metrics_log:
-                f.write("{},{},{},{}\n".format(row[0], row[1], row[2], row[3]))
+                f.write("{},{},{},{},{},{},{}\n".format(*row))
         print("[Train] Metrics logged successfully to:", csv_filename)
     except Exception as e:
         print("[Train] Error writing metrics CSV:", e)
 
+
+def train_agent(save_path="models/cw_q_table_8state.pkl", use_simulator=False):
+    robot = RobotInterface(use_simulator=use_simulator)
+    calibrate_color_sensor(robot)
+
+    env = Environment()
+    agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
+                           alpha=settings.PHASE_ALPHA, gamma=settings.PHASE_GAMMA, zero_init=True)
+    metrics_log = []
+    checkpoint = settings.STRAIGHT_CHECKPOINT_PATH
+
+    start_phase = PHASE_STRAIGHT
+    if file_exists(checkpoint):
+        start_phase = wait_for_choice(robot, "Straight-phase checkpoint found: {}".format(checkpoint), [
+            ("UP", "1", PHASE_STRAIGHT, "Start FRESH (all-zero table, straight phase)"),
+            ("RIGHT", "2", PHASE_TURN, "Load checkpoint, go to TURN phase"),
+        ])
+        if start_phase == PHASE_TURN:
+            try:
+                agent.load(checkpoint)
+            except Exception as e:
+                print("[Train] Could not load checkpoint ({}). Starting straight phase fresh.".format(e))
+                start_phase = PHASE_STRAIGHT
+
+    print("[Train] alpha={} gamma={} | Q-table start: {}".format(
+        settings.PHASE_ALPHA, settings.PHASE_GAMMA,
+        "all zeros" if start_phase == PHASE_STRAIGHT else checkpoint))
+    agent.display_q_table()
+
+    try:
+        if start_phase == PHASE_STRAIGHT:
+            run_phase(robot, env, agent, PHASE_STRAIGHT, metrics_log)
+            ensure_parent_dir(checkpoint)
+            agent.save(checkpoint)
+            print("[Train] Straight phase saved to:", checkpoint)
+
+            go_on = wait_for_choice(robot, "STRAIGHT PHASE COMPLETE", [
+                ("UP", "1", True, "Continue to TURN phase"),
+                ("DOWN", "2", False, "Stop here (straight table already saved)"),
+            ])
+            if not go_on:
+                return agent, robot
+
+        run_phase(robot, env, agent, PHASE_TURN, metrics_log)
+        prompt_save_q_table(agent, save_path, robot)
+    finally:
+        robot.stop()
+        write_metrics(metrics_log)
+
     return agent, robot
 
 
-def prompt_continue_or_stop_training(robot):
-    """
-    Prompts user after a training session completes:
-      - UP Button   : Continue Training (start another session)
-      - DOWN Button : Stop Training
-    Supports EV3 brick button menu and terminal input fallback for simulator mode.
-    """
-    has_buttons = False
-    if not robot.is_simulated and hasattr(robot, 'ev3') and robot.ev3 is not None:
-        try:
-            from pybricks.parameters import Button
-            has_buttons = True
-        except ImportError:
-            has_buttons = False
-
-    print("\n==================================================")
-    print("              CONTINUE TRAINING?                   ")
-    print("==================================================")
-    print(" -> Option 1 (UP Button / '1')   : CONTINUE Training")
-    print(" -> Option 2 (DOWN Button / '2') : STOP Training")
-    print("==================================================\n")
-
-    if has_buttons:
-        from pybricks.parameters import Button
-        print("[Train] Waiting for EV3 button press (UP=Continue, DOWN=Stop)...")
-        while True:
-            pressed = robot.ev3.buttons.pressed()
-            if Button.UP in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=1000, duration=150)
-                except Exception:
-                    pass
-                wait(500)
-                return True
-            elif Button.DOWN in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=500, duration=300)
-                except Exception:
-                    pass
-                wait(500)
-                return False
-            wait(100)
-    else:
-        try:
-            user_choice = input("Enter option [1=Continue, 2=Stop] (default: 2): ").strip()
-            return user_choice == "1"
-        except (EOFError, RuntimeError):
-            print("[Train] Non-interactive environment. Stopping training.")
-            return False
-
-
-def prompt_same_or_new_table(robot):
-    """
-    Prompts user (after choosing to continue) whether to:
-      - UP Button   : Keep training the SAME Q-table (continues in-memory)
-      - DOWN Button : Train a NEW Q-table (fresh heuristic start, saved separately)
-    Returns True to keep the same table, False to start a new one.
-    """
-    has_buttons = False
-    if not robot.is_simulated and hasattr(robot, 'ev3') and robot.ev3 is not None:
-        try:
-            from pybricks.parameters import Button
-            has_buttons = True
-        except ImportError:
-            has_buttons = False
-
-    print("\n==================================================")
-    print("        SAME Q-TABLE OR NEW Q-TABLE?               ")
-    print("==================================================")
-    print(" -> Option 1 (UP Button / '1')   : SAME Q-table (keep training it)")
-    print(" -> Option 2 (DOWN Button / '2') : NEW Q-table (fresh heuristic start)")
-    print("==================================================\n")
-
-    if has_buttons:
-        from pybricks.parameters import Button
-        print("[Train] Waiting for EV3 button press (UP=Same Table, DOWN=New Table)...")
-        while True:
-            pressed = robot.ev3.buttons.pressed()
-            if Button.UP in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=1000, duration=150)
-                except Exception:
-                    pass
-                wait(500)
-                return True
-            elif Button.DOWN in pressed:
-                try:
-                    robot.ev3.speaker.beep(frequency=700, duration=150)
-                except Exception:
-                    pass
-                wait(500)
-                return False
-            wait(100)
-    else:
-        try:
-            user_choice = input("Enter option [1=Same Table, 2=New Table] (default: 1): ").strip()
-            return user_choice != "2"
-        except (EOFError, RuntimeError):
-            print("[Train] Non-interactive environment. Continuing same table.")
-            return True
-
-
 if __name__ == "__main__":
-    target_file = sys.argv[1] if len(sys.argv) > 1 else None
-    save_path = target_file or "models/cw_q_table_8state.pkl"
-
-    session_agent = None
-    session_robot = None
-    force_fresh = False
-
-    while True:
-        session_agent, session_robot = train_agent(
-            save_path=save_path,
-            force_fresh=force_fresh,
-            robot=session_robot,
-            agent=session_agent,
-        )
-
-        if not prompt_continue_or_stop_training(session_robot):
-            print("[Train] Training session ended.")
-            break
-
-        if prompt_same_or_new_table(session_robot):
-            print("[Train] Continuing training on the SAME Q-table.")
-            force_fresh = False
-        else:
-            print("[Train] Starting a NEW Q-table for the next session.")
-            base_path = target_file or "models/cw_q_table_8state.pkl"
-            save_path = generate_dated_filename(base_path)
-            session_agent = None
-            force_fresh = True
+    target_file = sys.argv[1] if len(sys.argv) > 1 else "models/cw_q_table_8state.pkl"
+    train_agent(save_path=target_file)

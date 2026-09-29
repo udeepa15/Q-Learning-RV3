@@ -151,6 +151,38 @@ TURN_180_MS    = 5000  # spin duration for ~180 degrees
 
 
 
+# ----------------------------------------------------
+# PHASED TRAINING (Straight Line -> Turns)
+# ----------------------------------------------------
+# Straight phase: only the near-edge rows and the gentle steering columns are trained.
+STRAIGHT_STATES  = (2, 3, 4)   # Light Drift White, Edge, Drift Black
+STRAIGHT_ACTIONS = (ACTION_FORWARD, ACTION_SLIGHT_LEFT, ACTION_SLIGHT_RIGHT)
+
+# Turn phase: the remaining rows and columns.
+TURN_STATES  = (0, 1, 5, 6, 7)  # Pure White, Medium Drift White, Heavy Drift Black, Pure Black, Lost
+TURN_ACTIONS = (ACTION_MICRO_LEFT, ACTION_SHARP_LEFT, ACTION_MICRO_RIGHT,
+                ACTION_SHARP_RIGHT, ACTION_REVERSE)
+
+STRAIGHT_EPISODE_MS = 4000
+TURN_EPISODE_MS     = 5000
+TRAIN_STEP_TIME_MS  = 20   # Longer than DEFAULT_STEP_TIME_MS so each action visibly changes the next reading
+
+# Hyperparameters for the phased trainer (Q-table starts from all zeros)
+PHASE_ALPHA         = 0.3   # Higher than ALPHA: few short episodes, near-deterministic rewards
+PHASE_GAMMA         = 0.6   # Rewards are mostly immediate; keep the horizon short
+PHASE_EPSILON_START = 0.4
+PHASE_EPSILON_DECAY = 0.85  # Per episode (expect ~10-20 episodes per phase)
+PHASE_EPSILON_MIN   = 0.05
+PROGRESS_REWARD     = 1.0   # +/- bonus when the next reading moves toward/away from the edge
+
+STRAIGHT_CHECKPOINT_PATH = "models/straight_q_table_8state.pkl"
+
+
+def actions_for_state(state):
+    """Columns a row is allowed to use under phased training."""
+    return STRAIGHT_ACTIONS if state in STRAIGHT_STATES else TURN_ACTIONS
+
+
 # Non-RL Reflex / Hardware Parameters
 OBSTACLE_DISTANCE_THRESHOLD = 20  # cm / percentage distance threshold for IR sensor
 DEFAULT_STEP_TIME_MS = 5          # Action execution duration (5ms step delay)

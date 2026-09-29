@@ -197,6 +197,38 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
             return candidates[0]
 
 
+def is_phased_table(q_table):
+    """True if every non-zero cell lies in the columns its row owns under phased training."""
+    for state, row in enumerate(q_table):
+        allowed = settings.actions_for_state(state)
+        for action, q_val in enumerate(row):
+            if q_val != 0.0 and action not in allowed:
+                return False
+    return True
+
+
+def wait_for_start(robot):
+    """Blocks until CENTER is pressed (Enter in simulator mode) so the robot can be placed first."""
+    print("\n==================================================")
+    print(" Place robot on the line -> Press CENTER to START EVALUATION")
+    print("==================================================\n")
+    if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
+        return
+    try:
+        from pybricks.parameters import Button
+    except ImportError:
+        return
+    while Button.CENTER not in robot.ev3.buttons.pressed():
+        wait(50)
+    try:
+        robot.ev3.speaker.beep(frequency=1200, duration=200)
+    except Exception:
+        pass
+    while Button.CENTER in robot.ev3.buttons.pressed():
+        wait(50)
+    wait(300)
+
+
 def evaluate_agent(max_iterations=None, use_simulator=False):
     """
     Evaluation loop executing pure Q-table exploitation with track direction detection.
@@ -220,7 +252,12 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     # Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge) -- run
     # after the Q-table is picked so evaluation always starts from a fresh reading
     # of the current track surface, not stale thresholds from a past run.
-    calibrate_color_sensor(robot)
+    if not calibrate_color_sensor(robot, start_label="EVALUATION"):
+        wait_for_start(robot)
+
+    phased = is_phased_table(agent.q_table)
+    if phased:
+        print("[Evaluate] Phased Q-table detected: each row only uses the columns it was trained on.")
 
     # Set epsilon = 0.0 for pure exploitation
     epsilon = 0.0
@@ -247,7 +284,8 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
             state = env.get_state(intensity)
 
             # 3. Select best action (pure exploitation)
-            action = agent.choose_action(state, epsilon)
+            allowed = settings.actions_for_state(state) if phased else None
+            action = agent.choose_action(state, epsilon, allowed)
 
             # 4. Execute action
             robot.execute_action(action)
