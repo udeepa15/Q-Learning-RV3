@@ -185,4 +185,4 @@ def actions_for_state(state):
 
 # Non-RL Reflex / Hardware Parameters
 OBSTACLE_DISTANCE_THRESHOLD = 20  # cm / percentage distance threshold for IR sensor
-DEFAULT_STEP_TIME_MS = 5          # Action execution duration (5ms step delay)
+DEFAULT_STEP_TIME_MS = 3   # Action execution duration (5ms step delay)
