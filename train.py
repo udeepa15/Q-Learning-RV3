@@ -187,6 +187,7 @@ def run_episode(robot, env, agent, phase, epsilon):
     """
     phase_states, phase_actions, duration_ms = PHASES[phase]
 
+    settings.reset_direction()
     env.reset()
     updates = 0
     off_phase_steps = 0

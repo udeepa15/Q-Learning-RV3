@@ -261,6 +261,7 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     if phased:
         print("[Evaluate] Phased Q-table detected: each row only uses the columns it was trained on.")
 
+    settings.reset_direction()
     epsilon = 0.0
     print("[Evaluate] Epsilon set to 0.0 (Pure Exploitation Mode).")
 

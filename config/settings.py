@@ -51,15 +51,19 @@ NUM_STATES = 8
 # Base Drive Speed Parameter (deg/s) - Change this number to adjust overall robot speed!
 BASE_SPEED = 300
 
-# Turn Direction Mode ("CW" for Clockwise, "CCW" for Counter-Clockwise)
-# Runtime-switchable via set_direction() -- used by the 180-degree obstacle turnaround.
-TURN_DIRECTION = "CW"
+# Start configuration. Edit these to change how the robot is set up on the track.
+# Turn direction: "CW" for Clockwise, "CCW" for Counter-Clockwise.
+START_DIRECTION = "CW"
 
 # Which physical edge of the 5cm white strip we follow: "OUTER" or "INNER".
 # The two edges are mirror images:
 #   OUTER edge, CW : black on the left,  white on the right
 #   INNER edge, CW : black on the right, white on the left
-LINE_EDGE = "OUTER"
+START_EDGE = "OUTER"
+
+# Runtime state, changed by set_direction() (the obstacle turnaround flips the direction).
+TURN_DIRECTION = START_DIRECTION
+LINE_EDGE = START_EDGE
 
 # White is on the robot's right when (direction, edge) is CW+OUTER or CCW+INNER;
 # otherwise the left/right speed tuples must be mirrored.
@@ -120,7 +124,12 @@ def set_direction(direction, edge=None):
         TURN_DIRECTION, LINE_EDGE, INVERT_TURNS))
 
 
-set_direction(TURN_DIRECTION)
+def reset_direction():
+    """Restores the start configuration (used at the start of every episode / evaluation run)."""
+    set_direction(START_DIRECTION, START_EDGE)
+
+
+reset_direction()
 
 # 180-degree obstacle turnaround parameters (tune TURN_180_MS for your wheelbase!)
 TURN_180_SPEED = 200   # deg/s pivot speed for the turnaround spin

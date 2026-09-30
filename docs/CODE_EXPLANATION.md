@@ -45,7 +45,7 @@ Thresholds are **overwritten by calibration** at the start of every training/eva
 
 ## 4. Actions (8)
 
-Speeds are (left, right) in deg/s with `BASE_SPEED = 300`, for `CW` direction on the `OUTER` edge. They are mirrored automatically by `set_direction()` for other direction/edge combinations.
+Speeds are (left, right) in deg/s with `BASE_SPEED = 300`, for `CW` direction on the `OUTER` edge. They are mirrored automatically by `set_direction()` for other direction/edge combinations. The start configuration is `START_DIRECTION` / `START_EDGE` in settings; `reset_direction()` restores it at the start of every training episode and every evaluation run, because the obstacle reflex flips the direction at runtime.
 
 | ID | Action | Speeds |
 |---|---|---|
