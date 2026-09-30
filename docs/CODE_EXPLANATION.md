@@ -108,8 +108,11 @@ The straight phase is saved to `models/straight_q_table_8state.pkl` so you can r
 `hardcoded_obstacle_avoidance(robot)` runs when the IR distance is below `OBSTACLE_DISTANCE_THRESHOLD`:
 1. Back away, then pivot ~180 degrees (`TURN_180_SPEED`, `TURN_180_MS`).
 2. Flip the travel direction (CW <-> CCW); the followed edge (OUTER/INNER) stays the same.
-3. Sweep to re-acquire the edge; fall back to an expanding spiral search if needed.
-4. Confirm it grabbed the correct edge of the strip, not its mirror, then return control to the agent.
+3. `reacquire_edge()` finds OUR edge of the strip. It reads the intensity before moving, then moves in small steps (`EDGE_SEARCH_STEP_MS`, 40 ms) and reads again after each one. The two edges are mirror images, so the direction of the change identifies them: moving toward the expected white side the reading rises at the correct edge, and moving away from it the reading falls. The robot stops the moment it sees the expected change.
+   - Already on the edge band: probe toward white for up to `EDGE_PROBE_MS`. A reading that reaches the white threshold confirms the correct edge. A reading that falls means the opposite edge, so it searches across the strip.
+   - Otherwise: search toward white (`EDGE_SEARCH_TOWARD_MS`), then back the other way (`EDGE_SEARCH_AWAY_MS`).
+4. If nothing is found, an expanding spiral search runs, then `reacquire_edge()` runs again to confirm the identity.
+5. Control returns to the agent with the mirrored left/right mapping in effect and a cleared Lost timer.
 
 ## 9. Calibration
 

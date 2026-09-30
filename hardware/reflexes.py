@@ -34,46 +34,65 @@ def _spin_toward_white():
     return (-100, 100)
 
 
-def confirm_correct_edge(robot):
+def _avg_intensity(robot, samples=3):
+    total = 0.0
+    for _ in range(samples):
+        total += robot.read_intensity()
+    return total / samples
+
+
+def reacquire_edge(robot):
     """
-    The 5cm white strip has two edges that read identically at a single
-    point, but are mirror images (OUTER edge CW: black left / white right,
-    INNER edge CW: black right / white left). After re-acquiring an edge
-    band reading, nudge the sensor toward the expected WHITE side:
-      - Reading gets whiter (or stays in band) -> correct edge, nudge back.
-      - Reading gets blacker -> we grabbed the opposite edge of the strip;
-        sweep back across the white strip until the far edge is reached.
+    Finds OUR edge of the 5cm strip after a turnaround. The strip's two edges
+    are mirror images, so the direction of the intensity change identifies them:
+    moving toward the expected WHITE side the reading rises at the correct edge;
+    moving away from it the reading falls at the correct edge.
+    The intensity is read before moving and after every small step, and the robot
+    stops as soon as the expected change is seen.
     """
-    spin = _spin_toward_white()
-    back = (-spin[0], -spin[1])
+    step = settings.EDGE_SEARCH_STEP_MS
+    mid = (settings.PERFECT_EDGE_LOW_8 + settings.PERFECT_EDGE_HIGH_8) / 2.0
+    toward = _spin_toward_white()
+    away = (-toward[0], -toward[1])
 
-    robot.turn_direct(spin[0], spin[1], 150)
-    robot.stop()
-    intensity = robot.read_intensity()
-
-    if intensity >= settings.PERFECT_EDGE_LOW_8:
-        robot.turn_direct(back[0], back[1], 150)
-        robot.stop()
-        print("[Reflex] Edge identity confirmed: {} edge (probe intensity={}).".format(settings.LINE_EDGE, intensity))
-        return True
-
-    # Mirror image detected: white was on the unexpected side -> wrong edge.
-    print("[Reflex] WRONG edge acquired (probe intensity={}). Crossing strip back to the {} edge...".format(
-        intensity, settings.LINE_EDGE))
-    crossed_white = False
-    for _ in range(30):
-        robot.turn_direct(back[0], back[1], 100)
-        intensity = robot.read_intensity()
-        if not crossed_white:
-            if intensity >= settings.PERFECT_EDGE_HIGH_8:
-                crossed_white = True
-        elif is_on_edge(intensity):
+    if is_on_edge(_avg_intensity(robot)):
+        for _ in range(settings.EDGE_PROBE_MS // step):
+            robot.turn_direct(toward[0], toward[1], step)
             robot.stop()
-            print("[Reflex] Correct {} edge re-acquired (intensity={}).".format(settings.LINE_EDGE, intensity))
+            intensity = _avg_intensity(robot)
+            if intensity >= settings.PERFECT_EDGE_HIGH_8:
+                for _ in range(10):
+                    robot.turn_direct(away[0], away[1], step)
+                    robot.stop()
+                    if is_on_edge(_avg_intensity(robot)):
+                        break
+                print("[Reflex] Correct {} edge confirmed (reading rose toward white).".format(settings.LINE_EDGE))
+                return True
+            if intensity < settings.PERFECT_EDGE_LOW_8:
+                print("[Reflex] Reading fell toward white: opposite edge. Searching across the strip...")
+                break
+
+    previous = _avg_intensity(robot)
+    for _ in range(settings.EDGE_SEARCH_TOWARD_MS // step):
+        robot.turn_direct(toward[0], toward[1], step)
+        intensity = robot.read_intensity()
+        if previous < mid <= intensity:
+            robot.stop()
+            print("[Reflex] Correct {} edge found (rising toward white, intensity={}).".format(settings.LINE_EDGE, intensity))
             return True
+        previous = intensity
+
+    previous = _avg_intensity(robot)
+    for _ in range(settings.EDGE_SEARCH_AWAY_MS // step):
+        robot.turn_direct(away[0], away[1], step)
+        intensity = robot.read_intensity()
+        if previous >= mid > intensity:
+            robot.stop()
+            print("[Reflex] Correct {} edge found (falling away from white, intensity={}).".format(settings.LINE_EDGE, intensity))
+            return True
+        previous = intensity
 
     robot.stop()
-    print("[Reflex] WARNING: Could not cross back to the {} edge.".format(settings.LINE_EDGE))
     return False
 
 
@@ -142,38 +161,13 @@ def hardcoded_obstacle_avoidance(robot):
     new_direction = "CCW" if settings.TURN_DIRECTION == "CW" else "CW"
     settings.set_direction(new_direction)
 
-    # 4. Re-acquire the track edge, sweeping toward the white/strip side first
-    first_spin = _spin_toward_white()
-    second_spin = (-first_spin[0], -first_spin[1])
-
-    edge_found = False
-    max_sweep_steps = 15
-
-    for _ in range(max_sweep_steps):
-        robot.turn_direct(first_spin[0], first_spin[1], 100)
-        intensity = robot.read_intensity()
-        if is_on_edge(intensity):
-            edge_found = True
-            print("[Reflex] Edge refound during first sweep (intensity={}).".format(intensity))
-            break
+    # 4. Re-acquire OUR edge (identity checked by the direction of the intensity change)
+    edge_found = reacquire_edge(robot)
 
     if not edge_found:
-        print("[Reflex] Edge not found on first sweep. Sweeping back the other way...")
-        for _ in range(max_sweep_steps * 2):
-            robot.turn_direct(second_spin[0], second_spin[1], 100)
-            intensity = robot.read_intensity()
-            if is_on_edge(intensity):
-                edge_found = True
-                print("[Reflex] Edge refound during second sweep (intensity={}).".format(intensity))
-                break
-
-    # 4.5. If edge is STILL not found after both sweeps -> Perform Expanding Spiral Search!
-    if not edge_found:
-        edge_found = spiral_search_for_edge(robot)
-
-    # 5. Make sure we grabbed OUR edge of the 5cm strip, not its mirror twin
-    if edge_found:
-        confirm_correct_edge(robot)
+        print("[Reflex] Edge not found. Starting spiral search...")
+        if spiral_search_for_edge(robot):
+            edge_found = reacquire_edge(robot)
 
     robot.stop()
     wait(100)

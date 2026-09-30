@@ -134,6 +134,12 @@ reset_direction()
 TURN_180_SPEED = 200   # deg/s pivot speed for the turnaround spin
 TURN_180_MS    = 5000
 
+# Edge re-acquisition after the turnaround: small steps so the narrow edge band is not skipped.
+EDGE_SEARCH_STEP_MS   = 40
+EDGE_PROBE_MS         = 600    # max time to probe toward white when already on the edge band
+EDGE_SEARCH_TOWARD_MS = 1600   # search time toward the expected white side
+EDGE_SEARCH_AWAY_MS   = 3200   # search time back across the strip
+
 
 # PHASED TRAINING (Straight Line -> Turns)
 STRAIGHT_STATES  = (2, 3, 4)   # Light Drift White, Edge, Drift Black
