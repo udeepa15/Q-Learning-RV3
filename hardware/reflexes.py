@@ -185,36 +185,6 @@ def hardcoded_obstacle_avoidance(robot):
             settings.TURN_DIRECTION, settings.LINE_EDGE))
  
 
-def detect_track_direction(robot):
-    """
-    RULE C: Sweep-and-detect reflex to determine track direction.
-    Sweeps left at startup:
-      - If it sees white (intensity >= WHITE_THRESHOLD), returns 'CCW'
-      - If it sees black (intensity <= BLACK_THRESHOLD), returns 'CW'
-    """
-    print("[Reflex] Detecting track direction via initial sweep...")
-
-    robot.turn_direct(-100, 100, 400)
-    robot.stop()
-    wait(100)
-
-    intensity = robot.read_intensity()
-    print("[Reflex] Post-sweep intensity reading:", intensity)
-
-    # Determine CW vs CCW
-    if intensity >= settings.PURE_WHITE_THRESHOLD_8:
-        direction = "CCW"
-    else:
-        direction = "CW"
-
-    robot.turn_direct(100, -100, 400)
-    robot.stop()
-    wait(100)
-
-    print("[Reflex] Track direction detected: {}".format(direction))
-    return direction
-
-
 def save_calibration(filepath="models/calibration.json"):
     """
     Saves current color sensor intensity thresholds to JSON file.

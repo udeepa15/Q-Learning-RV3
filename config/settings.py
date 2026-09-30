@@ -20,13 +20,6 @@ ALPHA = 0.1
 GAMMA = 0.7
 
 
-EPSILON_START = 0.3
-EPSILON_DECAY = 0.97
-EPSILON_MIN = 0.01
-
-NUM_EPISODES = 100
-MAX_STEPS_PER_EPISODE = 100
-
 WHITE_INTENSITY = 24.1
 BLACK_INTENSITY = 2.5
 EDGE_INTENSITY = 11.1
@@ -136,8 +129,6 @@ set_direction(TURN_DIRECTION)
 # 180-degree obstacle turnaround parameters (tune TURN_180_MS for your wheelbase!)
 TURN_180_SPEED = 200   # deg/s pivot speed for the turnaround spin
 TURN_180_MS    = 5000
-
-
 
 
 # PHASED TRAINING (Straight Line -> Turns)

@@ -2,7 +2,6 @@
 Hardware Abstraction Layer for EV3 Pybricks Robot with PC Simulator Fallback.
 """
 
-import sys
 
 # Try importing EV3 Pybricks modules
 IS_HARDWARE = True
