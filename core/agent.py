@@ -87,7 +87,7 @@ class QLearningAgent:
         """
         Loads the Q-table from a pickle file.
         Rejects tables whose shape does not match this agent's state/action space
-        (e.g. stale 3-State or 5-State model files).
+        (e.g. model files from an older state/action layout).
         """
         with open(filepath, 'rb') as f:
             q_table = pickle.load(f)

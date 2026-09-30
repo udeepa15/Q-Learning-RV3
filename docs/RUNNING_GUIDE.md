@@ -1,98 +1,67 @@
-# Deployment & Running Guide
+# Running Guide
 
-This guide details how to execute, train, and evaluate the EV3 Q-Learning path-following robot on both a PC simulator and physical LEGO Mindstorms EV3 hardware.
+## 1. Requirements
 
----
+- **PC simulator:** Python 3.7+, standard library only. `RobotInterface` falls back to a simulator when Pybricks is not installed.
+- **EV3 brick:** EV3 MicroPython (Pybricks) image, VS Code with the LEGO MINDSTORMS EV3 MicroPython extension.
+- **Ports:** left motor B, right motor C, color sensor S1 (reflection), infrared sensor S4 (distance).
 
-## 1. Environment Requirements
+## 2. Commands
 
-### PC Simulator Setup
-- Python 3.7+ installed.
-- No external packages required (uses pure standard Python libraries `random`, `pickle`, `time`, `os`, `sys`).
-
-### EV3 Hardware Setup
-- LEGO Mindstorms EV3 Brick running **EV3 MicroPython v2.0** image on microSD card.
-- VS Code with **LEGO Mindstorms EV3 MicroPython Extension** installed.
-- Hardware configuration:
-  - **Left Motor**: Port B
-  - **Right Motor**: Port C
-  - **Color Sensor**: Port S1 (Reflection Mode)
-  - **Infrared Sensor**: Port S4 (Distance Mode)
-
----
-
-## 2. PC Simulation Mode Execution
-
-You can run training and evaluation directly on your PC without an EV3 brick connected. The hardware abstraction layer (`RobotInterface`) will automatically detect the absence of Pybricks hardware and activate simulator mode.
-
-### Running Training on PC
-To train the Clockwise (`CW`) model:
 ```bash
-python train.py models/cw_q_table.pkl
+python train.py                        # saves to models/cw_q_table_8state.pkl (default)
+python train.py models/my_table.pkl    # custom final save path
+python evaluate.py                     # evaluation
 ```
 
-To train the Counter-Clockwise (`CCW`) model:
-```bash
-python train.py models/ccw_q_table.pkl
-```
+On the brick, download the project with the extension and run `train.py` (training) or `main.py` (evaluation). Over SSH the project lives at `/home/robot/Q-Learning-RV3`.
 
-### Running Evaluation on PC
-To run evaluation:
-```bash
-python evaluate.py
-```
+To copy Q-tables and CSVs back from the brick, use `scp` (for example `scp -r robot@ev3dev.local:/home/robot/Q-Learning-RV3/models/* models/`).
 
----
+## 3. Calibration (every run)
 
-## 3. Physical EV3 Brick Deployment
+Both `train.py` and `evaluate.py` start with sensor calibration.
 
-### Method A: VS Code EV3 Extension (Recommended)
-1. Turn on the EV3 brick and connect it to your PC via USB cable, Bluetooth, or Wi-Fi.
-2. Open the workspace folder in VS Code.
-3. Open the EV3 extension tab on the sidebar and click **Download and Run** (or press `F5`).
-4. VS Code will transfer `ev3_rl_project` to the brick and execute `main.py`.
+- **CENTER:** measure pure white, pure black, then the edge (place the sensor, press CENTER for each). Thresholds are computed, applied, and saved to `models/calibration.json`. Press CENTER again to confirm and start.
+- **DOWN:** skip and load `models/calibration.json`.
+- Abnormal readings (not white > edge > black) also fall back to the saved file.
+- The simulator skips calibration and loads the saved file.
 
-### Method B: Manual Command Line Execution via SSH
-1. Connect via SSH to the EV3 brick:
-   ```bash
-   ssh robot@ev3dev.local
-   ```
-   *(Default password: `maker`)*
+## 4. Training
 
-2. Navigate to the project directory:
-   ```bash
-   cd /home/robot/ev3_rl_project
-   ```
+Training is interactive and runs in two phases (see CODE_EXPLANATION.md section 6).
 
-3. Run training:
-   ```bash
-   brickman run train.py models/cw_q_table.pkl
-   ```
+If `models/straight_q_table_8state.pkl` exists you are asked: **UP / `1`** start fresh, or **RIGHT / `2`** load the checkpoint and go straight to the turn phase.
 
-4. Run evaluation:
-   ```bash
-   brickman run evaluate.py
-   ```
+Each episode:
 
----
+1. Place the robot on the line and press **CENTER** (Enter in the simulator).
+2. After the episode: **UP / `1`** keep and run the next episode, **LEFT / `2`** discard this episode and redo it, **DOWN / `3`** keep, save, and finish the phase.
+3. After the straight phase: **UP / `1`** continue to the turn phase, **DOWN / `2`** stop here.
+4. After the turn phase, the save menu: **UP / `1`** default path, **RIGHT / `2`** date-stamped file, **DOWN / `3`** discard.
 
-## 4. Operational Workflow
+Outputs: the Q-table (`.pkl`) and `training_metrics_phased.csv` (per-episode updates, reward, off-phase steps, lost steps, epsilon).
+
+## 5. Evaluation
+
+1. Choose a Q-table from `models/`: UP/DOWN browse, CENTER select, LEFT twice to delete (simulator: type a number, or `d<number>` to delete).
+2. Calibrate (section 3).
+3. If calibration ran, the robot starts right away after confirmation. If you skipped it, press CENTER to start.
+4. The robot follows the line with epsilon = 0. The IR sensor triggers the obstacle reflex. Ctrl+C (or stopping the program on the brick) stops the motors.
+
+If the selected Q-table cannot be loaded, evaluation aborts.
+
+## 6. Flow
 
 ```mermaid
 flowchart TD
-    A[Start evaluate.py] --> B[Execute detect_track_direction sweep]
-    B --> C{Intensity Reading}
-    C -- >= 28 (White) --> D[Select CCW Direction]
-    C -- < 28 (Black) --> E[Select CW Direction]
-    D --> F[Load models/ccw_q_table.pkl]
-    E --> G[Load models/cw_q_table.pkl]
-    F --> H[Set Epsilon = 0.0 Pure Exploitation]
-    G --> H
-    H --> I{IR Distance < 20cm?}
-    I -- Yes --> J[Execute Non-RL Obstacle Reflex]
-    I -- No --> K[Observe Intensity State]
-    J --> I
-    K --> L[Select Max Q Action]
-    L --> M[Execute Motor Command]
-    M --> I
+    A[evaluate.py] --> B[Select Q-table]
+    B --> C[Calibrate or load calibration.json]
+    C --> D{IR distance < threshold?}
+    D -- Yes --> E[Obstacle reflex: back up, 180 turn, flip direction, find edge]
+    E --> D
+    D -- No --> F[Read intensity -> state]
+    F --> G[Greedy action from Q-table]
+    G --> H[Execute action]
+    H --> D
 ```

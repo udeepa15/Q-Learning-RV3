@@ -256,7 +256,7 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
       1. Pure White surface
       2. Pure Black surface
       3. Perfect Edge boundary
-    Calculates dynamic drift white & drift black intensity thresholds for 3-State and 5-State modes.
+    Derives the 8-state intensity thresholds from the measured values and saves them.
     """
     if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
         print("[Calibration] Simulator mode detected. Skipping interactive calibration.")

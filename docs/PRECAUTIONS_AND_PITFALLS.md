@@ -10,12 +10,9 @@ This document outlines key physical robot calibration steps, hardware considerat
 > Reflection values returned by `ColorSensor.reflection()` are sensitive to ambient lighting and physical sensor height above the track surface.
 
 - **Sensor Height**: The color sensor should be mounted vertically **$8\text{mm} - 12\text{mm}$** above the surface. If mounted too high ($>20\text{mm}$), reflected light intensity drops dramatically and ambient light introduces noise.
-- **Threshold Adjustment**:
-  - Open `config/settings.py`.
-  - Test raw reflection readings on your physical track:
-    - Pure White surface reading $\rightarrow$ update `WHITE_INTENSITY` & `WHITE_THRESHOLD` (default: 35 / 28).
-    - Pure Black surface reading $\rightarrow$ update `BLACK_INTENSITY` & `BLACK_THRESHOLD` (default: 3 / 11).
-    - Edge boundary reading $\rightarrow$ update `EDGE_INTENSITY` (default: 19).
+- **Thresholds are calibrated at every run**: `calibrate_color_sensor()` measures white, black and the edge, derives all state thresholds from them and saves them to `models/calibration.json`. Re-calibrate whenever lighting or the track surface changes. The defaults in `config/settings.py` are only used when no calibration file can be loaded.
+- **Skipping calibration** loads the saved file, so make sure it came from the same lighting and sensor height.
+- Calibration is skipped in the simulator.
 
 ---
 
@@ -42,7 +39,7 @@ This document outlines key physical robot calibration steps, hardware considerat
 
 3. **Sensor Sampling Delays**:
    - Sensor read commands (`color_sensor.reflection()`, `ir_sensor.distance()`) take $\sim 5 - 10\text{ms}$ on I2C/analog EV3 buses.
-   - Avoid zero-delay loops (`while True: pass`). Always include a small wait interval (`wait(settings.DEFAULT_STEP_TIME_MS)` = 100ms) between RL iterations.
+   - Avoid zero-delay loops (`while True: pass`). Always include a small wait interval (`DEFAULT_STEP_TIME_MS` = 3 ms in evaluation, `TRAIN_STEP_TIME_MS` = 20 ms in training) between RL iterations.
 
 ---
 
@@ -52,7 +49,9 @@ This document outlines key physical robot calibration steps, hardware considerat
 - On a clockwise (CW) track:
   - If tracking the **outer edge**, white is on the left, black is on the right.
   - If tracking the **inner edge**, black is on the left, white is on the right.
-- Ensure the trained model (`cw_q_table.pkl` vs `ccw_q_table.pkl`) matches the specific edge gradient your robot is placed on during evaluation.
+- The direction and edge are set in `config/settings.py` (`TURN_DIRECTION`, `LINE_EDGE`); the left/right action speeds are mirrored automatically.
+- The obstacle reflex flips the direction (CW <-> CCW) after its 180-degree turn but keeps the same physical edge.
+- Ensure the trained model (trained with the same `TURN_DIRECTION` and `LINE_EDGE` in `config/settings.py`) matches the specific edge gradient your robot is placed on during evaluation.
 
 ---
 
@@ -62,3 +61,9 @@ This document outlines key physical robot calibration steps, hardware considerat
 - $100\%$ corresponds to approximately $70\text{cm}$.
 - An IR reading of $20$ corresponds to approximately $14 - 20\text{cm}$.
 - If using an **Ultrasonic Sensor** (`UltrasonicSensor`) instead of an Infrared Sensor, `distance()` returns distance in millimeters ($20\text{cm} = 200\text{mm}$). Update `settings.OBSTACLE_DISTANCE_THRESHOLD` accordingly if swapping sensor hardware.
+
+---
+
+## 6. Lost-State Timing
+
+`TOTALLY_LOST_CONSECUTIVE_STEPS` (12) counts steps, not time. A step is 20 ms in training and 3 ms in evaluation, so the robot has less real time to recover before being declared lost during evaluation.
