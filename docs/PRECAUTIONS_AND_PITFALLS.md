@@ -66,4 +66,4 @@ This document outlines key physical robot calibration steps, hardware considerat
 
 ## 6. Lost-State Timing
 
-`TOTALLY_LOST_CONSECUTIVE_STEPS` (12) counts steps, not time. A step is 20 ms in training and 3 ms in evaluation, so the robot has less real time to recover before being declared lost during evaluation.
+The Lost state is time-based: it triggers after the sensor stays in Pure Black for `LOST_TIME_MS` (2000 ms, `config/settings.py`), identically in training and evaluation. The timer restarts whenever the reading leaves Pure Black, at the start of every episode, and after the obstacle reflex.

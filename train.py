@@ -201,6 +201,7 @@ def run_episode(robot, env, agent, phase, epsilon):
         if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
             print("[Train] IR sensor triggered. Running obstacle reflex (no Q-update).")
             hardcoded_obstacle_avoidance(robot)
+            env.reset()
             state = env.get_state(robot.read_intensity())
             continue
 

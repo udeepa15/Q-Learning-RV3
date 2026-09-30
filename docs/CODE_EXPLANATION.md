@@ -41,7 +41,7 @@ Thresholds are **overwritten by calibration** at the start of every training/eva
 | 4 | Drift Black | 6 - 8 |
 | 5 | Heavy Drift Black | 4 - 6 |
 | 6 | Pure Black | < 4 |
-| 7 | Totally Lost | < `TOTALLY_LOST_THRESHOLD` for 12 consecutive steps |
+| 7 | Totally Lost | Pure Black continuously for `LOST_TIME_MS` (2000 ms) |
 
 ## 4. Actions (8)
 
@@ -113,4 +113,4 @@ The straight phase is saved to `models/straight_q_table_8state.pkl` so you can r
 
 ## 9. Calibration
 
-`calibrate_color_sensor()` measures white, black and edge (10-sample averages), derives all state thresholds from them (edge deadband = max(3, 12% of the white-black range); white and black sides each split into thirds; lost threshold = black + 0.8), writes them into `settings` in memory, and saves them to `models/calibration.json`. Skipping, abnormal readings, or simulator mode load the saved JSON instead.
+`calibrate_color_sensor()` measures white, black and edge (10-sample averages), derives all state thresholds from them (edge deadband = max(3, 12% of the white-black range); white and black sides each split into thirds; , writes them into `settings` in memory, and saves them to `models/calibration.json`. Skipping, abnormal readings, or simulator mode load the saved JSON instead.

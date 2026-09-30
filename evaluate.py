@@ -275,6 +275,7 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
             if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
                 print("[Evaluate] Obstacle detected by IR sensor! Executing reflex.")
                 hardcoded_obstacle_avoidance(robot)
+                env.reset()
                 iteration += 1
                 continue
 

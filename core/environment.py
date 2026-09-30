@@ -17,27 +17,44 @@ STATE_HEAVY_DRIFT_BLACK  = 5
 STATE_PURE_BLACK         = 6
 STATE_TOTALLY_LOST       = 7
 
+try:
+    from pybricks.tools import StopWatch
+except ImportError:
+    import time
+
+    class StopWatch:
+        def __init__(self):
+            self._start = time.time()
+
+        def time(self):
+            return int((time.time() - self._start) * 1000)
+
+
+_clock = StopWatch()
+
 
 class Environment:
     """
     Manages state representation discretizer and Q-learning reward system for 8-State Architecture.
     """
     def __init__(self):
-        self.consecutive_lost_count = 0
+        self.pure_black_since = None
 
     def get_state(self, intensity):
         """
         Maps continuous color sensor intensity into 6 discrete color gradient states
         (3 white-side + 3 black-side, symmetric around the edge) + Edge + Lost.
+        Lost is reported once the reading has stayed in Pure Black for LOST_TIME_MS.
         Uses a wide Edge Deadband (PERFECT_EDGE_LOW_8 <= intensity < PERFECT_EDGE_HIGH_8) to prevent waddling.
         """
-        if intensity < settings.TOTALLY_LOST_THRESHOLD:
-            self.consecutive_lost_count += 1
+        if intensity < settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
+            now = _clock.time()
+            if self.pure_black_since is None:
+                self.pure_black_since = now
+            if now - self.pure_black_since >= settings.LOST_TIME_MS:
+                return STATE_TOTALLY_LOST
         else:
-            self.consecutive_lost_count = 0
-
-        if self.consecutive_lost_count >= settings.TOTALLY_LOST_CONSECUTIVE_STEPS:
-            return STATE_TOTALLY_LOST
+            self.pure_black_since = None
 
         if intensity >= settings.PURE_WHITE_THRESHOLD_8:
             return STATE_PURE_WHITE
@@ -124,9 +141,9 @@ class Environment:
 
     def reset(self):
         """
-        Resets lost step counters for a new episode.
+        Clears the Pure Black timer (new episode, or after a reflex that moved the robot).
         """
-        self.consecutive_lost_count = 0
+        self.pure_black_since = None
 
 
 

@@ -30,8 +30,7 @@ HEAVY_DRIFT_BLACK_THRESHOLD_8 = 4  # State 5: Heavy Drift Black (4 <= Intensity 
                                    # State 6: Pure Black (< 4)
 
 
-TOTALLY_LOST_THRESHOLD = 3          # State 7: Intensity below this counts as off-track black
-TOTALLY_LOST_CONSECUTIVE_STEPS = 12 # Consecutive steps (not time) before the Lost state triggers
+LOST_TIME_MS = 2000                 # State 7: continuous time on Pure Black before the robot counts as Lost
 
 
 ACTION_FORWARD      = 0

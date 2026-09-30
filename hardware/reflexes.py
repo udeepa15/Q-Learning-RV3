@@ -207,7 +207,6 @@ def save_calibration(filepath="models/calibration.json"):
         "WHITE_INTENSITY": settings.WHITE_INTENSITY,
         "BLACK_INTENSITY": settings.BLACK_INTENSITY,
         "EDGE_INTENSITY": settings.EDGE_INTENSITY,
-        "TOTALLY_LOST_THRESHOLD": settings.TOTALLY_LOST_THRESHOLD,
         "PERFECT_EDGE_HIGH_8": settings.PERFECT_EDGE_HIGH_8,
         "PERFECT_EDGE_LOW_8": settings.PERFECT_EDGE_LOW_8,
         "MEDIUM_DRIFT_WHITE_THRESH_8": settings.MEDIUM_DRIFT_WHITE_THRESH_8,
@@ -333,9 +332,6 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     settings.BLACK_INTENSITY = int(black_val)
     settings.EDGE_INTENSITY = int(edge_val)
 
-    # Set TOTALLY_LOST_THRESHOLD slightly above pure black reading so off-track black triggers lost state
-    settings.TOTALLY_LOST_THRESHOLD = int(black_val + 0.8)
-
     # 8-State Thresholds (With Edge Deadband zone to eliminate penguin waddling)
     deadband_offset = max(3, int((white_val - black_val) * 0.12))
     settings.PERFECT_EDGE_HIGH_8 = int(edge_val + deadband_offset)
@@ -373,7 +369,7 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     print("   -> State 4 (Drift Black)     : {} <= Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8, settings.PERFECT_EDGE_LOW_8))
     print("   -> State 5 (Heavy Drift Blk) : {} <= Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8, settings.DRIFT_BLACK_THRESHOLD_8))
     print("   -> State 6 (Pure Black)      : Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8))
-    print("   -> State 7 (Totally Lost)    : Intensity < {} (for {} steps)".format(settings.TOTALLY_LOST_THRESHOLD, settings.TOTALLY_LOST_CONSECUTIVE_STEPS))
+    print("   -> State 7 (Totally Lost)    : Pure Black for {} ms".format(settings.LOST_TIME_MS))
     print("==================================================")
     print(" -> PRESS CENTER BUTTON TO CONFIRM & START {}".format(start_label))
     print("==================================================\n")
