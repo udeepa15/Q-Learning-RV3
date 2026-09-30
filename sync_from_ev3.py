@@ -37,11 +37,9 @@ if __name__ == "__main__":
     print(f" Target Host: {EV3_HOST} ({EV3_USER})")
     print("==================================================")
 
-    # 1. Sync models directory
     print("\n1. Downloading Q-table model files (.pkl)...")
     run_scp(f"{REMOTE_PROJECT_DIR}/models/*", LOCAL_MODELS_DIR)
 
-    # 2. Sync metrics CSV files
     print("\n2. Downloading training metrics (.csv)...")
     run_scp(f"{REMOTE_PROJECT_DIR}/*.csv", "./")
 

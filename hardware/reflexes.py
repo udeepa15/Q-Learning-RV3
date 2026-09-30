@@ -30,8 +30,8 @@ def _spin_toward_white():
     white on the right when INVERT_TURNS is False, on the left when True.
     """
     if not settings.INVERT_TURNS:
-        return (100, -100)   # spin right
-    return (-100, 100)       # spin left
+        return (100, -100)
+    return (-100, 100)
 
 
 def confirm_correct_edge(robot):
@@ -89,12 +89,9 @@ def spiral_search_for_edge(robot, max_steps=45):
     outer_speed = 200
     base_inner = 30
     
-    # Determine curve direction towards the side where white is expected
     if not settings.INVERT_TURNS:
-        # White on right -> curve rightward in an expanding arc
         left_is_outer = True
     else:
-        # White on left -> curve leftward in an expanding arc
         left_is_outer = False
 
     for step in range(max_steps):
@@ -132,12 +129,10 @@ def hardcoded_obstacle_avoidance(robot):
     robot.stop()
     wait(100)
 
-    # 1. Back away from the obstacle
     robot.turn_direct(-120, -120, 500)
     robot.stop()
     wait(100)
 
-    # 2. Pivot ~180 degrees in place
     robot.turn_direct(settings.TURN_180_SPEED, -settings.TURN_180_SPEED, settings.TURN_180_MS)
     robot.stop()
     wait(100)
@@ -199,7 +194,6 @@ def detect_track_direction(robot):
     """
     print("[Reflex] Detecting track direction via initial sweep...")
 
-    # Sweep left
     robot.turn_direct(-100, 100, 400)
     robot.stop()
     wait(100)
@@ -213,7 +207,6 @@ def detect_track_direction(robot):
     else:
         direction = "CW"
 
-    # Return robot to initial orientation by sweeping back right
     robot.turn_direct(100, -100, 400)
     robot.stop()
     wait(100)
@@ -323,7 +316,6 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
         while Button.CENTER in robot.ev3.buttons.pressed():
             wait(100)
 
-        # Average 10 readings for accuracy
         total = 0
         for _ in range(10):
             total += robot.read_intensity()
@@ -339,7 +331,6 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     print(" (Waiting for button press...)")
     print("==================================================\n")
 
-    # Block execution until user explicitly presses a button
     while True:
         pressed = robot.ev3.buttons.pressed()
         if Button.CENTER in pressed:
@@ -356,23 +347,18 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
             return False
         wait(100)
 
-    # 1. Pure White
     white_val = wait_for_center_button("1/3 PURE WHITE SURFACE")
 
-    # 2. Pure Black
     black_val = wait_for_center_button("2/3 PURE BLACK SURFACE")
 
-    # 3. Perfect Edge
     edge_val = wait_for_center_button("3/3 PERFECT EDGE BOUNDARY")
 
-    # Sanity check: ensure white > edge > black
     if not (white_val > edge_val > black_val):
         print("[Calibration] WARNING: Readings abnormal (White={:.1f}, Edge={:.1f}, Black={:.1f}). Using defaults.".format(
             white_val, edge_val, black_val))
         load_calibration()
         return False
 
-    # Update base intensities in settings
     settings.WHITE_INTENSITY = int(white_val)
     settings.BLACK_INTENSITY = int(black_val)
     settings.EDGE_INTENSITY = int(edge_val)
@@ -399,7 +385,6 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     settings.DRIFT_BLACK_THRESHOLD_8       = int(settings.PERFECT_EDGE_LOW_8 - step_b * 1)
     settings.HEAVY_DRIFT_BLACK_THRESHOLD_8 = int(settings.PERFECT_EDGE_LOW_8 - step_b * 2)
 
-    # Save calibrated thresholds to models/calibration.json
     save_calibration()
 
     print("\n==================================================")
@@ -423,7 +408,6 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     print(" -> PRESS CENTER BUTTON TO CONFIRM & START {}".format(start_label))
     print("==================================================\n")
 
-    # Hold execution until user presses CENTER button
     while True:
         pressed = robot.ev3.buttons.pressed()
         if Button.CENTER in pressed:

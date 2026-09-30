@@ -19,42 +19,21 @@ except ImportError:
 class QLearningAgent:
     """
     Q-Learning Agent implemented in pure Python (no numpy dependency).
-    Supports 8-State Heuristic Initialization for Clockwise line following.
     """
     def __init__(self, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
-                 alpha=settings.ALPHA, gamma=settings.GAMMA, zero_init=False):
+                 alpha=settings.ALPHA, gamma=settings.GAMMA):
         self.n_states = n_states
         self.n_actions = n_actions
         self.alpha = alpha
         self.gamma = gamma
 
-        if zero_init:
-            self.q_table = [[0.0] * n_actions for _ in range(n_states)]
-        else:
-            self.q_table = self._initialize_q_table()
+        self.q_table = [[0.0] * n_actions for _ in range(n_states)]
 
     def snapshot(self):
         return [row[:] for row in self.q_table]
 
     def restore(self, snapshot):
         self.q_table = [row[:] for row in snapshot]
-
-    def _initialize_q_table(self):
-        """
-        Injects clean initial Q-values (0.0 and 5.0) for 8-State, 8-Action Clockwise line following:
-        Actions: [0: FWD, 1: M_LFT, 2: S_LFT, 3: SH_LFT, 4: M_RGT, 5: S_RGT, 6: SH_RGT, 7: REV]
-        3 white-side and 3 black-side drift tiers are symmetric around the edge.
-        """
-        return [
-            [0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0],  # Row 0: Pure White        -> Sharp LFT (5.0)
-            [0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 1: Medium Drift      -> Slight LFT (5.0)
-            [0.0, 5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 2: Light Drift       -> Micro LFT (5.0)
-            [5.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],  # Row 3: Perfect Edge      -> Drive FWD (5.0)
-            [0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0],  # Row 4: Drift Black       -> Micro RGT (5.0)
-            [0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0],  # Row 5: Heavy Drift Black -> Slight RGT (5.0)
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 0.0],  # Row 6: Pure Black        -> Sharp RGT (5.0)
-            [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0]   # Row 7: Lost / IR         -> Reverse (5.0)
-        ]
 
     def choose_action(self, state, epsilon, allowed_actions=None):
         """
@@ -65,10 +44,8 @@ class QLearningAgent:
         allowed_actions = list(allowed_actions)
 
         if random.random() < epsilon:
-            # Exploration: choose a random action
             return random.choice(allowed_actions)
 
-        # Exploitation: choose action with maximum Q-value for current state
         q_row = self.q_table[state]
         max_q = q_row[allowed_actions[0]]
         best_actions = [allowed_actions[0]]
@@ -80,7 +57,6 @@ class QLearningAgent:
             elif q_row[action] == max_q:
                 best_actions.append(action)
 
-        # Randomly break ties among actions with equal max Q-value
         return random.choice(best_actions)
 
     def update(self, state, action, reward, next_state, next_actions=None):

@@ -247,7 +247,9 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     try:
         agent.load(load_path)
     except Exception as e:
-        print("[Evaluate] Warning: Failed to load {}: {}. Agent will evaluate with the initial heuristic Q-table.".format(load_path, e))
+        print("[Evaluate] ERROR: Failed to load {}: {}. Aborting evaluation.".format(load_path, e))
+        robot.stop()
+        return
 
     # Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge) -- run
     # after the Q-table is picked so evaluation always starts from a fresh reading
@@ -259,7 +261,6 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     if phased:
         print("[Evaluate] Phased Q-table detected: each row only uses the columns it was trained on.")
 
-    # Set epsilon = 0.0 for pure exploitation
     epsilon = 0.0
     print("[Evaluate] Epsilon set to 0.0 (Pure Exploitation Mode).")
 
@@ -270,24 +271,19 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
                 print("[Evaluate] Reached maximum evaluation iterations ({}).".format(max_iterations))
                 break
 
-            # RULE D: Non-RL Reflex for Obstacle Avoidance
             if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
                 print("[Evaluate] Obstacle detected by IR sensor! Executing reflex.")
                 hardcoded_obstacle_avoidance(robot)
                 iteration += 1
                 continue
 
-            # 1. Read current intensity gradient
             intensity = robot.read_intensity()
 
-            # 2. Get state
             state = env.get_state(intensity)
 
-            # 3. Select best action (pure exploitation)
             allowed = settings.actions_for_state(state) if phased else None
             action = agent.choose_action(state, epsilon, allowed)
 
-            # 4. Execute action
             robot.execute_action(action)
             wait(settings.DEFAULT_STEP_TIME_MS)
 
@@ -301,5 +297,4 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
 
 
 if __name__ == "__main__":
-    # If run as main, execute evaluation loop
     evaluate_agent(use_simulator=False)

@@ -290,7 +290,7 @@ def train_agent(save_path="models/cw_q_table_8state.pkl", use_simulator=False):
 
     env = Environment()
     agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
-                           alpha=settings.PHASE_ALPHA, gamma=settings.PHASE_GAMMA, zero_init=True)
+                           alpha=settings.PHASE_ALPHA, gamma=settings.PHASE_GAMMA)
     metrics_log = []
     checkpoint = settings.STRAIGHT_CHECKPOINT_PATH
 
