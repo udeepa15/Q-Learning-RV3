@@ -40,6 +40,8 @@ Each episode:
 3. After the straight phase: **UP / `1`** continue to the turn phase, **DOWN / `2`** stop here.
 4. After the turn phase, the save menu: **UP / `1`** default path, **RIGHT / `2`** date-stamped file, **DOWN / `3`** discard.
 
+**Training the Lost row (state 7):** it only trains if the robot stays on Pure Black for `LOST_TIME_MS` (2 s), which the agent usually avoids by steering back. In the turn phase, run a few episodes with the robot placed at least 15 cm onto black. A warning is printed at the end of the turn phase if row 7 is still untrained.
+
 Outputs: the Q-table (`.pkl`) and `training_metrics_phased.csv` (per-episode updates, reward, off-phase steps, lost steps, epsilon).
 
 ## 5. Evaluation

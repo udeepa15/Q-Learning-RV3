@@ -329,6 +329,8 @@ def train_agent(save_path="models/cw_q_table_8state.pkl", use_simulator=False):
                 return agent, robot
 
         run_phase(robot, env, agent, PHASE_TURN, metrics_log)
+        if not any(agent.q_table[STATE_TOTALLY_LOST]):
+            print("\n[Train] WARNING: the Lost row (state 7) was never trained. Run more TURN episodes starting with the robot 15+ cm onto black for {} ms or longer.".format(settings.LOST_TIME_MS))
         prompt_save_q_table(agent, save_path, robot)
     finally:
         robot.stop()
