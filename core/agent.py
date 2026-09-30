@@ -21,7 +21,7 @@ class QLearningAgent:
     Q-Learning Agent implemented in pure Python (no numpy dependency).
     """
     def __init__(self, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
-                 alpha=settings.ALPHA, gamma=settings.GAMMA):
+                 alpha=settings.PHASE_ALPHA, gamma=settings.PHASE_GAMMA):
         self.n_states = n_states
         self.n_actions = n_actions
         self.alpha = alpha

@@ -105,7 +105,11 @@ class RobotInterface:
             self.left_motor.run(left_speed)
             self.right_motor.run(right_speed)
         else:
-            if action_id in (settings.ACTION_SLIGHT_LEFT, settings.ACTION_SHARP_LEFT):
+            if action_id == settings.ACTION_MICRO_LEFT:
+                self.sim_intensity = max(0, self.sim_intensity - 2)
+            elif action_id == settings.ACTION_MICRO_RIGHT:
+                self.sim_intensity = min(100, self.sim_intensity + 2)
+            elif action_id in (settings.ACTION_SLIGHT_LEFT, settings.ACTION_SHARP_LEFT):
                 self.sim_intensity = max(0, self.sim_intensity - 5)
             elif action_id in (settings.ACTION_SLIGHT_RIGHT, settings.ACTION_SHARP_RIGHT):
                 self.sim_intensity = min(100, self.sim_intensity + 5)

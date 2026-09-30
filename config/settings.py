@@ -16,26 +16,22 @@ except ImportError:
     PORT_COLOR_SENSOR = "Port.S1"
     PORT_IR_SENSOR = "Port.S4"
 
-ALPHA = 0.1
-GAMMA = 0.7
-
-
-WHITE_INTENSITY = 24.1
-BLACK_INTENSITY = 2.5
+WHITE_INTENSITY = 24.1  # Raw calibration reading (record only)
+BLACK_INTENSITY = 2.5   # Simulator / calibration record only
 EDGE_INTENSITY = 11.1
 
-PURE_WHITE_THRESHOLD_8       = 23  # State 0: Pure White (>= 23)
-MEDIUM_DRIFT_WHITE_THRESH_8  = 20  # State 1: Medium Drift (20 <= Intensity < 23)
-                                   # State 2: Light Drift (14 <= Intensity < 20)
+PURE_WHITE_THRESHOLD_8       = 20  # State 0: Pure White (>= 20)
+MEDIUM_DRIFT_WHITE_THRESH_8  = 17  # State 1: Medium Drift (17 <= Intensity < 20)
+                                   # State 2: Light Drift (14 <= Intensity < 17)
 PERFECT_EDGE_HIGH_8          = 14  # State 3: Edge High Bound
 PERFECT_EDGE_LOW_8           = 8   # State 3: Edge Low Bound -> Deadband (8 <= Intensity < 14)
-DRIFT_BLACK_THRESHOLD_8      = 4   # State 4: Drift Black (4 <= Intensity < 8)
-HEAVY_DRIFT_BLACK_THRESHOLD_8 = 2  # State 5: Heavy Drift Black (2 <= Intensity < 4)
-                                   # State 6: Pure Black (< 2)
+DRIFT_BLACK_THRESHOLD_8      = 6   # State 4: Drift Black (6 <= Intensity < 8)
+HEAVY_DRIFT_BLACK_THRESHOLD_8 = 4  # State 5: Heavy Drift Black (4 <= Intensity < 6)
+                                   # State 6: Pure Black (< 4)
 
 
-TOTALLY_LOST_THRESHOLD = 1          # State 7: Intensity < 1 considered deep off-track black
-TOTALLY_LOST_CONSECUTIVE_STEPS = 12 # 12 consecutive steps (1.2s) allowed to steer out of black
+TOTALLY_LOST_THRESHOLD = 3          # State 7: Intensity below this counts as off-track black
+TOTALLY_LOST_CONSECUTIVE_STEPS = 12 # Consecutive steps (not time) before the Lost state triggers
 
 
 ACTION_FORWARD      = 0
@@ -159,5 +155,5 @@ def actions_for_state(state):
 
 
 # Non-RL Reflex / Hardware Parameters
-OBSTACLE_DISTANCE_THRESHOLD = 20  # cm / percentage distance threshold for IR sensor
+OBSTACLE_DISTANCE_THRESHOLD = 20  # IR distance reading (0-100 percentage scale) below which the reflex triggers
 DEFAULT_STEP_TIME_MS = 3

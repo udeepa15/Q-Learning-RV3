@@ -24,7 +24,7 @@ Q-table: 8 states x 8 actions, initialised to **all zeros**. After each learning
 Q(s,a) <- Q(s,a) + alpha * [ r + gamma * max_a' Q(s',a') - Q(s,a) ]
 ```
 
-The max over `a'` only considers the columns allowed for `s'` (see phased training). Training uses `PHASE_ALPHA = 0.3` and `PHASE_GAMMA = 0.6`. `ALPHA` / `GAMMA` in settings are the agent's constructor defaults (used by `evaluate.py`, where no updates happen).
+The max over `a'` only considers the columns allowed for `s'` (see phased training). Hyperparameters are `PHASE_ALPHA = 0.3` and `PHASE_GAMMA = 0.6`, which are also the agent's constructor defaults.
 
 `QLearningAgent` provides `choose_action(state, epsilon, allowed_actions=None)`, `update(...)`, `snapshot()` / `restore()` (used to discard an episode), `save()`, `load()` and `display_q_table()`.
 
@@ -34,13 +34,13 @@ Thresholds are **overwritten by calibration** at the start of every training/eva
 
 | State | Name | Intensity |
 |---|---|---|
-| 0 | Pure White | >= 23 |
-| 1 | Medium Drift White | 20 - 23 |
-| 2 | Light Drift White | 14 - 20 |
+| 0 | Pure White | >= 20 |
+| 1 | Medium Drift White | 17 - 20 |
+| 2 | Light Drift White | 14 - 17 |
 | 3 | Perfect Edge (deadband) | 8 - 14 |
-| 4 | Drift Black | 4 - 8 |
-| 5 | Heavy Drift Black | 2 - 4 |
-| 6 | Pure Black | < 2 |
+| 4 | Drift Black | 6 - 8 |
+| 5 | Heavy Drift Black | 4 - 6 |
+| 6 | Pure Black | < 4 |
 | 7 | Totally Lost | < `TOTALLY_LOST_THRESHOLD` for 12 consecutive steps |
 
 ## 4. Actions (8)
