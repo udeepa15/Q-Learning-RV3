@@ -1,6 +1,6 @@
 # Future Improvements & Advanced Expansion Areas
 
-While the current Q-learning codebase completely satisfies all requirements and rules, this document outlines potential future enhancements for advanced research and competitions.
+While the current Q-learning codebase implements Q-learning from a heuristic start with calibration and a non-RL obstacle reflex, this document outlines potential future enhancements for advanced research and competitions.
 
 ---
 
@@ -38,7 +38,7 @@ While the current Q-learning codebase completely satisfies all requirements and 
 - **Benefit**: Allows the robot to center directly over the line rather than following a single edge gradient.
 
 ### B. Continuous State Space Discretization (Tile Coding / Linear Function Approximation)
-- Expand state representation from 4 discrete buckets to 10 fine-grained intensity bins or tile codings ($0-10, 10-20, \dots, 90-100$).
+- Replace the 8 calibrated intensity buckets with finer bins or tile coding.
 - **Benefit**: Smoother velocity transitions and finer steering control on complex tracks.
 
 ---
@@ -49,5 +49,5 @@ While the current Q-learning codebase completely satisfies all requirements and 
 - In `evaluate.py`, allow the agent to continue performing low-rate ($\epsilon = 0.02$) Q-updates during evaluation runs.
 - **Benefit**: Enables real-time adaptation to changing track surface reflectivity or fading battery voltage.
 
-### B. Model Checkpointing
-- Periodically save intermediate Q-tables during long training runs to prevent data loss in the event of battery disconnects.
+### B. Finer Checkpointing
+- Save after every few episodes to survive battery disconnects.

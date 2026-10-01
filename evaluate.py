@@ -197,6 +197,28 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
             return candidates[0]
 
 
+def wait_for_start(robot):
+    """Blocks until CENTER is pressed (Enter in simulator mode) so the robot can be placed first."""
+    print("\n==================================================")
+    print(" Place robot on the line -> Press CENTER to START EVALUATION")
+    print("==================================================\n")
+    if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
+        return
+    try:
+        from pybricks.parameters import Button
+    except ImportError:
+        return
+    while Button.CENTER not in robot.ev3.buttons.pressed():
+        wait(50)
+    try:
+        robot.ev3.speaker.beep(frequency=1200, duration=200)
+    except Exception:
+        pass
+    while Button.CENTER in robot.ev3.buttons.pressed():
+        wait(50)
+    wait(300)
+
+
 def evaluate_agent(max_iterations=None, use_simulator=False):
     """
     Evaluation loop executing pure Q-table exploitation with track direction detection.
@@ -217,12 +239,11 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     except Exception as e:
         print("[Evaluate] Warning: Failed to load {}: {}. Agent will evaluate with the initial heuristic Q-table.".format(load_path, e))
 
-    # Interactive Sensor Calibration (Pure White, Pure Black, Perfect Edge) -- run
-    # after the Q-table is picked so evaluation always starts from a fresh reading
-    # of the current track surface, not stale thresholds from a past run.
-    calibrate_color_sensor(robot)
+    # Calibrate after the Q-table is picked so evaluation starts from a fresh reading of the track surface.
+    if not calibrate_color_sensor(robot, start_label="EVALUATION"):
+        wait_for_start(robot)
 
-    # Set epsilon = 0.0 for pure exploitation
+    settings.reset_direction()
     epsilon = 0.0
     print("[Evaluate] Epsilon set to 0.0 (Pure Exploitation Mode).")
 
@@ -233,23 +254,16 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
                 print("[Evaluate] Reached maximum evaluation iterations ({}).".format(max_iterations))
                 break
 
-            # RULE D: Non-RL Reflex for Obstacle Avoidance
             if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
                 print("[Evaluate] Obstacle detected by IR sensor! Executing reflex.")
                 hardcoded_obstacle_avoidance(robot)
+                env.reset()
                 iteration += 1
                 continue
 
-            # 1. Read current intensity gradient
             intensity = robot.read_intensity()
-
-            # 2. Get state
             state = env.get_state(intensity)
-
-            # 3. Select best action (pure exploitation)
             action = agent.choose_action(state, epsilon)
-
-            # 4. Execute action
             robot.execute_action(action)
             wait(settings.DEFAULT_STEP_TIME_MS)
 
@@ -263,5 +277,4 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
 
 
 if __name__ == "__main__":
-    # If run as main, execute evaluation loop
     evaluate_agent(use_simulator=False)

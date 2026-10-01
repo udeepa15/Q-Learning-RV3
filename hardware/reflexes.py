@@ -30,50 +30,69 @@ def _spin_toward_white():
     white on the right when INVERT_TURNS is False, on the left when True.
     """
     if not settings.INVERT_TURNS:
-        return (100, -100)   # spin right
-    return (-100, 100)       # spin left
+        return (100, -100)
+    return (-100, 100)
 
 
-def confirm_correct_edge(robot):
+def _avg_intensity(robot, samples=3):
+    total = 0.0
+    for _ in range(samples):
+        total += robot.read_intensity()
+    return total / samples
+
+
+def reacquire_edge(robot):
     """
-    The 5cm white strip has two edges that read identically at a single
-    point, but are mirror images (OUTER edge CW: black left / white right,
-    INNER edge CW: black right / white left). After re-acquiring an edge
-    band reading, nudge the sensor toward the expected WHITE side:
-      - Reading gets whiter (or stays in band) -> correct edge, nudge back.
-      - Reading gets blacker -> we grabbed the opposite edge of the strip;
-        sweep back across the white strip until the far edge is reached.
+    Finds OUR edge of the 5cm strip after a turnaround. The strip's two edges
+    are mirror images, so the direction of the intensity change identifies them:
+    moving toward the expected WHITE side the reading rises at the correct edge;
+    moving away from it the reading falls at the correct edge.
+    The intensity is read before moving and after every small step, and the robot
+    stops as soon as the expected change is seen.
     """
-    spin = _spin_toward_white()
-    back = (-spin[0], -spin[1])
+    step = settings.EDGE_SEARCH_STEP_MS
+    mid = (settings.PERFECT_EDGE_LOW_8 + settings.PERFECT_EDGE_HIGH_8) / 2.0
+    toward = _spin_toward_white()
+    away = (-toward[0], -toward[1])
 
-    robot.turn_direct(spin[0], spin[1], 150)
-    robot.stop()
-    intensity = robot.read_intensity()
-
-    if intensity >= settings.PERFECT_EDGE_LOW_8:
-        robot.turn_direct(back[0], back[1], 150)
-        robot.stop()
-        print("[Reflex] Edge identity confirmed: {} edge (probe intensity={}).".format(settings.LINE_EDGE, intensity))
-        return True
-
-    # Mirror image detected: white was on the unexpected side -> wrong edge.
-    print("[Reflex] WRONG edge acquired (probe intensity={}). Crossing strip back to the {} edge...".format(
-        intensity, settings.LINE_EDGE))
-    crossed_white = False
-    for _ in range(30):
-        robot.turn_direct(back[0], back[1], 100)
-        intensity = robot.read_intensity()
-        if not crossed_white:
-            if intensity >= settings.PERFECT_EDGE_HIGH_8:
-                crossed_white = True
-        elif is_on_edge(intensity):
+    if is_on_edge(_avg_intensity(robot)):
+        for _ in range(settings.EDGE_PROBE_MS // step):
+            robot.turn_direct(toward[0], toward[1], step)
             robot.stop()
-            print("[Reflex] Correct {} edge re-acquired (intensity={}).".format(settings.LINE_EDGE, intensity))
+            intensity = _avg_intensity(robot)
+            if intensity >= settings.PERFECT_EDGE_HIGH_8:
+                for _ in range(10):
+                    robot.turn_direct(away[0], away[1], step)
+                    robot.stop()
+                    if is_on_edge(_avg_intensity(robot)):
+                        break
+                print("[Reflex] Correct {} edge confirmed (reading rose toward white).".format(settings.LINE_EDGE))
+                return True
+            if intensity < settings.PERFECT_EDGE_LOW_8:
+                print("[Reflex] Reading fell toward white: opposite edge. Searching across the strip...")
+                break
+
+    previous = _avg_intensity(robot)
+    for _ in range(settings.EDGE_SEARCH_TOWARD_MS // step):
+        robot.turn_direct(toward[0], toward[1], step)
+        intensity = robot.read_intensity()
+        if previous < mid <= intensity:
+            robot.stop()
+            print("[Reflex] Correct {} edge found (rising toward white, intensity={}).".format(settings.LINE_EDGE, intensity))
             return True
+        previous = intensity
+
+    previous = _avg_intensity(robot)
+    for _ in range(settings.EDGE_SEARCH_AWAY_MS // step):
+        robot.turn_direct(away[0], away[1], step)
+        intensity = robot.read_intensity()
+        if previous >= mid > intensity:
+            robot.stop()
+            print("[Reflex] Correct {} edge found (falling away from white, intensity={}).".format(settings.LINE_EDGE, intensity))
+            return True
+        previous = intensity
 
     robot.stop()
-    print("[Reflex] WARNING: Could not cross back to the {} edge.".format(settings.LINE_EDGE))
     return False
 
 
@@ -89,12 +108,9 @@ def spiral_search_for_edge(robot, max_steps=45):
     outer_speed = 200
     base_inner = 30
     
-    # Determine curve direction towards the side where white is expected
     if not settings.INVERT_TURNS:
-        # White on right -> curve rightward in an expanding arc
         left_is_outer = True
     else:
-        # White on left -> curve leftward in an expanding arc
         left_is_outer = False
 
     for step in range(max_steps):
@@ -132,12 +148,10 @@ def hardcoded_obstacle_avoidance(robot):
     robot.stop()
     wait(100)
 
-    # 1. Back away from the obstacle
     robot.turn_direct(-120, -120, 500)
     robot.stop()
     wait(100)
 
-    # 2. Pivot ~180 degrees in place
     robot.turn_direct(settings.TURN_180_SPEED, -settings.TURN_180_SPEED, settings.TURN_180_MS)
     robot.stop()
     wait(100)
@@ -147,38 +161,13 @@ def hardcoded_obstacle_avoidance(robot):
     new_direction = "CCW" if settings.TURN_DIRECTION == "CW" else "CW"
     settings.set_direction(new_direction)
 
-    # 4. Re-acquire the track edge, sweeping toward the white/strip side first
-    first_spin = _spin_toward_white()
-    second_spin = (-first_spin[0], -first_spin[1])
-
-    edge_found = False
-    max_sweep_steps = 15
-
-    for _ in range(max_sweep_steps):
-        robot.turn_direct(first_spin[0], first_spin[1], 100)
-        intensity = robot.read_intensity()
-        if is_on_edge(intensity):
-            edge_found = True
-            print("[Reflex] Edge refound during first sweep (intensity={}).".format(intensity))
-            break
+    # 4. Re-acquire OUR edge (identity checked by the direction of the intensity change)
+    edge_found = reacquire_edge(robot)
 
     if not edge_found:
-        print("[Reflex] Edge not found on first sweep. Sweeping back the other way...")
-        for _ in range(max_sweep_steps * 2):
-            robot.turn_direct(second_spin[0], second_spin[1], 100)
-            intensity = robot.read_intensity()
-            if is_on_edge(intensity):
-                edge_found = True
-                print("[Reflex] Edge refound during second sweep (intensity={}).".format(intensity))
-                break
-
-    # 4.5. If edge is STILL not found after both sweeps -> Perform Expanding Spiral Search!
-    if not edge_found:
-        edge_found = spiral_search_for_edge(robot)
-
-    # 5. Make sure we grabbed OUR edge of the 5cm strip, not its mirror twin
-    if edge_found:
-        confirm_correct_edge(robot)
+        print("[Reflex] Edge not found. Starting spiral search...")
+        if spiral_search_for_edge(robot):
+            edge_found = reacquire_edge(robot)
 
     robot.stop()
     wait(100)
@@ -189,38 +178,6 @@ def hardcoded_obstacle_avoidance(robot):
         print("[Reflex] WARNING: Edge not refound after turnaround. RL agent resumes anyway ({}, {} edge).".format(
             settings.TURN_DIRECTION, settings.LINE_EDGE))
  
-
-def detect_track_direction(robot):
-    """
-    RULE C: Sweep-and-detect reflex to determine track direction.
-    Sweeps left at startup:
-      - If it sees white (intensity >= WHITE_THRESHOLD), returns 'CCW'
-      - If it sees black (intensity <= BLACK_THRESHOLD), returns 'CW'
-    """
-    print("[Reflex] Detecting track direction via initial sweep...")
-
-    # Sweep left
-    robot.turn_direct(-100, 100, 400)
-    robot.stop()
-    wait(100)
-
-    intensity = robot.read_intensity()
-    print("[Reflex] Post-sweep intensity reading:", intensity)
-
-    # Determine CW vs CCW
-    if intensity >= settings.PURE_WHITE_THRESHOLD_8:
-        direction = "CCW"
-    else:
-        direction = "CW"
-
-    # Return robot to initial orientation by sweeping back right
-    robot.turn_direct(100, -100, 400)
-    robot.stop()
-    wait(100)
-
-    print("[Reflex] Track direction detected: {}".format(direction))
-    return direction
-
 
 def save_calibration(filepath="models/calibration.json"):
     """
@@ -244,7 +201,6 @@ def save_calibration(filepath="models/calibration.json"):
         "WHITE_INTENSITY": settings.WHITE_INTENSITY,
         "BLACK_INTENSITY": settings.BLACK_INTENSITY,
         "EDGE_INTENSITY": settings.EDGE_INTENSITY,
-        "TOTALLY_LOST_THRESHOLD": settings.TOTALLY_LOST_THRESHOLD,
         "PERFECT_EDGE_HIGH_8": settings.PERFECT_EDGE_HIGH_8,
         "PERFECT_EDGE_LOW_8": settings.PERFECT_EDGE_LOW_8,
         "MEDIUM_DRIFT_WHITE_THRESH_8": settings.MEDIUM_DRIFT_WHITE_THRESH_8,
@@ -287,24 +243,24 @@ def load_calibration(filepath="models/calibration.json"):
         return False
 
 
-def calibrate_color_sensor(robot):
+def calibrate_color_sensor(robot, start_label="TRAINING"):
     """
     Interactive color sensor calibration routine on EV3 brick:
       1. Pure White surface
       2. Pure Black surface
       3. Perfect Edge boundary
-    Calculates dynamic drift white & drift black intensity thresholds for 3-State and 5-State modes.
+    Derives the 8-state intensity thresholds from the measured values and saves them.
     """
     if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
         print("[Calibration] Simulator mode detected. Skipping interactive calibration.")
         load_calibration()
-        return
+        return False
 
     try:
         from pybricks.parameters import Button
     except ImportError:
         load_calibration()
-        return
+        return False
 
     def wait_for_center_button(prompt_text):
         print("\n==================================================")
@@ -323,7 +279,6 @@ def calibrate_color_sensor(robot):
         while Button.CENTER in robot.ev3.buttons.pressed():
             wait(100)
 
-        # Average 10 readings for accuracy
         total = 0
         for _ in range(10):
             total += robot.read_intensity()
@@ -339,7 +294,6 @@ def calibrate_color_sensor(robot):
     print(" (Waiting for button press...)")
     print("==================================================\n")
 
-    # Block execution until user explicitly presses a button
     while True:
         pressed = robot.ev3.buttons.pressed()
         if Button.CENTER in pressed:
@@ -353,32 +307,24 @@ def calibrate_color_sensor(robot):
             print("[Calibration] Skipped calibration. Loading saved thresholds or defaults.")
             load_calibration()
             wait(500)
-            return
+            return False
         wait(100)
 
-    # 1. Pure White
     white_val = wait_for_center_button("1/3 PURE WHITE SURFACE")
 
-    # 2. Pure Black
     black_val = wait_for_center_button("2/3 PURE BLACK SURFACE")
 
-    # 3. Perfect Edge
     edge_val = wait_for_center_button("3/3 PERFECT EDGE BOUNDARY")
 
-    # Sanity check: ensure white > edge > black
     if not (white_val > edge_val > black_val):
         print("[Calibration] WARNING: Readings abnormal (White={:.1f}, Edge={:.1f}, Black={:.1f}). Using defaults.".format(
             white_val, edge_val, black_val))
         load_calibration()
-        return
+        return False
 
-    # Update base intensities in settings
     settings.WHITE_INTENSITY = int(white_val)
     settings.BLACK_INTENSITY = int(black_val)
     settings.EDGE_INTENSITY = int(edge_val)
-
-    # Set TOTALLY_LOST_THRESHOLD slightly above pure black reading so off-track black triggers lost state
-    settings.TOTALLY_LOST_THRESHOLD = int(black_val + 0.8)
 
     # 8-State Thresholds (With Edge Deadband zone to eliminate penguin waddling)
     deadband_offset = max(3, int((white_val - black_val) * 0.12))
@@ -399,7 +345,6 @@ def calibrate_color_sensor(robot):
     settings.DRIFT_BLACK_THRESHOLD_8       = int(settings.PERFECT_EDGE_LOW_8 - step_b * 1)
     settings.HEAVY_DRIFT_BLACK_THRESHOLD_8 = int(settings.PERFECT_EDGE_LOW_8 - step_b * 2)
 
-    # Save calibrated thresholds to models/calibration.json
     save_calibration()
 
     print("\n==================================================")
@@ -418,12 +363,11 @@ def calibrate_color_sensor(robot):
     print("   -> State 4 (Drift Black)     : {} <= Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8, settings.PERFECT_EDGE_LOW_8))
     print("   -> State 5 (Heavy Drift Blk) : {} <= Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8, settings.DRIFT_BLACK_THRESHOLD_8))
     print("   -> State 6 (Pure Black)      : Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8))
-    print("   -> State 7 (Totally Lost)    : Intensity < {} (for {} steps)".format(settings.TOTALLY_LOST_THRESHOLD, settings.TOTALLY_LOST_CONSECUTIVE_STEPS))
+    print("   -> State 7 (Totally Lost)    : Pure Black for {} ms".format(settings.LOST_TIME_MS))
     print("==================================================")
-    print(" -> PRESS CENTER BUTTON TO CONFIRM & START TRAINING")
+    print(" -> PRESS CENTER BUTTON TO CONFIRM & START {}".format(start_label))
     print("==================================================\n")
 
-    # Hold execution until user presses CENTER button
     while True:
         pressed = robot.ev3.buttons.pressed()
         if Button.CENTER in pressed:
@@ -435,5 +379,4 @@ def calibrate_color_sensor(robot):
             break
         wait(100)
 
-
-
+    return True

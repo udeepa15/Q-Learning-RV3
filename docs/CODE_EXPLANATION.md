@@ -1,97 +1,136 @@
 # Code Explanation & System Architecture
 
-This document provides a technical walkthrough of the Q-learning implementation, state/action representations, reward dynamics, and compliance with rules A, B, C, and D.
-
----
-
-## 1. System Architecture & Module Responsibilities
+## 1. Project Layout
 
 ```
-ev3_rl_project/
-├── config/
-│   └── settings.py       # Hyperparameters, thresholds, action speeds & port mappings
-├── hardware/
-│   ├── robot.py          # Pybricks device driver & PC simulator fallback
-│   └── reflexes.py       # Hardcoded reflexes (Obstacle Avoidance, Edge Confirm, & CW/CCW Detection)
+├── config/settings.py      # Hyperparameters, thresholds, speeds, ports, reflex timings
 ├── core/
-│   ├── agent.py          # Pure Python Q-Learning agent with Bellman update
-│   └── environment.py    # State discretizer & reward function (Reverse Trap logic)
-├── models/               # Storage for trained Q-table pickle files (.pkl)
-├── train.py              # RL Training pipeline with epsilon decay
-└── evaluate.py           # Evaluation pipeline with direction detection & reflex yielding
+│   ├── agent.py            # Tabular Q-learning agent (pure Python lists, no numpy)
+│   └── environment.py      # State discretizer, reward function, progress reward
+├── hardware/
+│   ├── robot.py            # Pybricks driver + PC simulator fallback
+│   └── reflexes.py         # Obstacle-avoidance reflex, edge search, sensor calibration
+├── models/                 # Q-tables (.pkl) and calibration.json
+├── train.py                # Flat trainer, starts from the heuristic table
+├── evaluate.py             # Greedy evaluation
+└── main.py                 # Brick entry point (runs evaluate_agent)
 ```
 
----
+## 2. Q-Learning
 
-## 2. Reinforcement Learning Mathematics
+Q-table: 8 states x 8 actions, **initialised from a heuristic table** that puts 5.0 on the ideal action of each row and 0.0 elsewhere (`QLearningAgent._initialize_q_table`). Training then refines it. After each step:
 
-### Bellman Equation Update
-The Q-table is represented as a 2D matrix of shape $(N_{\text{states}} \times N_{\text{actions}}) = (8 \times 8)$.
+```
+Q(s,a) <- Q(s,a) + alpha * [ r + gamma * max_a' Q(s',a') - Q(s,a) ]
+```
 
-The value of state-action pair $(s, a)$ is updated after each step according to the Bellman Equation:
+| Setting | Value |
+|---|---|
+| alpha (`ALPHA`) | 0.1 |
+| gamma (`GAMMA`) | 0.7 |
+| epsilon | 0.3, multiplied by 0.97 per episode, floor 0.01 |
+| Episodes x steps | 100 x 100 (`NUM_EPISODES`, `MAX_STEPS_PER_EPISODE`) |
+| Step wait | 20 ms (`DEFAULT_STEP_TIME_MS`, shared by training and evaluation) |
 
-\[
-Q(s, a) \leftarrow Q(s, a) + \alpha \cdot \left[ r + \gamma \cdot \max_{a'} Q(s', a') - Q(s, a) \right]
-\]
+Heuristic start (row = state, ideal action):
 
-Where:
-- $\alpha = 0.2$ (Learning Rate)
-- $\gamma = 0.7$ (Discount Factor)
-- $r$ is the immediate reward returned by `Environment.calculate_reward(s, a)`
-- $s'$ is the resulting next state
+| State | Ideal action |
+|---|---|
+| 0 Pure White | Sharp left |
+| 1 Medium Drift White | Slight left |
+| 2 Light Drift White | Micro left |
+| 3 Edge | Forward |
+| 4 Drift Black | Micro right |
+| 5 Heavy Drift Black | Slight right |
+| 6 Pure Black | Sharp right |
+| 7 Lost | Reverse |
 
----
+This is the same micro / slight / sharp ladder the reward function uses. The saved table has the same 8 x 8 layout as every other branch, so a table trained here can be evaluated on the `phased-training` branch and the other way round.
 
-## 3. Discretized State Space (8 States)
+`QLearningAgent` provides `choose_action(state, epsilon)`, `update(...)`, `save()`, `load()` and `display_q_table()`. `load()` rejects tables whose shape is not 8 x 8.
 
-Continuous color sensor reflection values ($0 - 100\%$) are mapped into 8 discrete states using calibrated thresholds:
+## 3. States (8)
 
-| State Index | State Name | Intensity Criteria | Description |
-|---|---|---|---|
-| `0` | `STATE_PURE_WHITE` | $\text{intensity} \ge 23$ | Sensor is fully over the pure white surface ($\text{White} = 24.1$). |
-| `1` | `STATE_MEDIUM_DRIFT_WHITE` | $20 \le \text{intensity} < 23$ | Sensor is drifting white. |
-| `2` | `STATE_LIGHT_DRIFT_WHITE` | $17 \le \text{intensity} < 20$ | Sensor is lightly drifting white. |
-| `3` | `STATE_MICRO_DRIFT_WHITE` | $14 \le \text{intensity} < 17$ | Sensor is micro drifting white. |
-| `4` | `STATE_PERFECT_EDGE` | $8 \le \text{intensity} < 14$ | Sensor is in the optimal Forward Deadband ($\text{Edge} = 11.1$). |
-| `5` | `STATE_DRIFT_BLACK` | $4 \le \text{intensity} < 8$ | Sensor is drifting into black territory. |
-| `6` | `STATE_PURE_BLACK` | $\text{intensity} < 4$ | Sensor is over pure black ($\text{Black} = 2.5$). |
-| `7` | `STATE_TOTALLY_LOST` | $\text{intensity} < 1$ for $\ge 12$ steps | Robot has driven completely off the line. |
+Thresholds are **overwritten by calibration** at the start of every training/evaluation run (see RUNNING_GUIDE). Values below are the `settings.py` defaults.
 
----
+| State | Name | Intensity |
+|---|---|---|
+| 0 | Pure White | >= 20 |
+| 1 | Medium Drift White | 17 - 20 |
+| 2 | Light Drift White | 14 - 17 |
+| 3 | Perfect Edge (deadband) | 8 - 14 |
+| 4 | Drift Black | 6 - 8 |
+| 5 | Heavy Drift Black | 4 - 6 |
+| 6 | Pure Black | < 4 |
+| 7 | Totally Lost | Pure Black continuously for `LOST_TIME_MS` (2000 ms) |
 
-## 4. Action Space (8 Actions - RULE B)
+## 4. Actions (8)
 
-To guarantee smooth curvature tracking and sharp turns, the action space contains 8 motor speed actions (Base Speed = $250\text{ deg/s}$):
+Speeds are (left, right) in deg/s with `BASE_SPEED = 300`, for `CW` direction on the `OUTER` edge. They are mirrored automatically by `set_direction()` for other direction/edge combinations. The start configuration is `START_DIRECTION` / `START_EDGE` in settings; `reset_direction()` restores it at the start of every training episode and every evaluation run, because the obstacle reflex flips the direction at runtime.
 
-| Action ID | Name | Left Speed (deg/s) | Right Speed (deg/s) | Motion Profile |
+| ID | Action | Speeds |
+|---|---|---|
+| 0 | Forward | 300, 300 |
+| 1 | Micro left | 210, 300 |
+| 2 | Slight left | 120, 300 |
+| 3 | Sharp left | -150, 300 |
+| 4 | Micro right | 300, 210 |
+| 5 | Slight right | 300, 120 |
+| 6 | Sharp right | 300, -150 |
+| 7 | Reverse | -210, -210 |
+
+## 5. Reward Function
+
+Per learning step: `reward = calculate_reward(s, a) + progress_reward(s, s')`.
+
+**Rule-based** (`Environment.calculate_reward`, table `_REWARDS` in `core/environment.py`). The size of the correction matches how far off the edge the robot is: micro near the edge, slight in the middle band, sharp far away. Black-side rows mirror the white-side rows with right actions.
+
+| State | Micro left | Slight left | Sharp left | Other actions |
 |---|---|---|---|---|
-| `0` | `ACTION_FORWARD` | $250$ | $250$ | Straight line acceleration |
-| `1` | `ACTION_MICRO_LEFT` | $37$ | $250$ | Gentle micro-turn left |
-| `2` | `ACTION_SLIGHT_LEFT` | $87$ | $250$ | Soft curve left |
-| `3` | `ACTION_SHARP_LEFT` | $-250$ | $250$ | Equal-speed pivot spin left |
-| `4` | `ACTION_MICRO_RIGHT` | $250$ | $37$ | Gentle micro-turn right |
-| `5` | `ACTION_SLIGHT_RIGHT` | $250$ | $87$ | Soft curve right |
-| `6` | `ACTION_SHARP_RIGHT` | $250$ | $-250$ | Equal-speed pivot spin right |
-| `7` | `ACTION_REVERSE` | $-175$ | $-175$ | Backward reversal |
+| 3 Edge | +1 | +1 | +1 | Forward +5, rest +1 |
+| 2 Light Drift White | +3.5 | +1.5 | -1 | -1 |
+| 1 Medium Drift White | +1 | +3 | +1.5 | -1 |
+| 0 Pure White | -3 | +2 | +3 | -3 |
+| 7 Lost | | | | Reverse +5, rest -5 |
 
----
+States 4, 5 and 6 use the same values with micro, slight and sharp **right**.
 
-## 5. Critical Rule Implementations
+**Progress shaping** (`Environment.progress_reward`): distance from the edge is `|state - 3|` (Lost counts as 4). `+PROGRESS_REWARD` (1.0) if the next state is closer, `-1.0` if farther, `0` if unchanged.
 
-### RULE A: The Reverse Trap
-- **Requirement**: The robot must learn to reverse natively using Q-learning when lost; reversing cannot be hardcoded into the RL decision loop.
-- **Mechanism**:
-  - In `Environment.get_state()`, consecutive steps below intensity $1$ are counted.
-  - When $\ge 12$ steps ($1.2\text{s}$) are recorded, state transitions to `STATE_TOTALLY_LOST`.
-  - In `Environment.calculate_reward()`:
-    - If action is `ACTION_REVERSE` (7): **$+5.0$ reward**.
-    - If action is forward/turning: **$-5.0$ penalty**.
+## 6. Training (`train.py`)
 
-### RULE B: Action Smoothness
-- 8-action space includes `MICRO_LEFT` / `MICRO_RIGHT` for deadband tracking without penguin waddling.
+Flat training: all 64 cells can be updated, starting from the heuristic table.
 
-### RULE C: Clockwise vs Anti-Clockwise (CCW) Support
-- `detect_track_direction(robot)` sweeps left at startup and determines CW vs CCW based on intensity.
+1. Calibrate the sensor (see section 9).
+2. If a saved table exists you choose **UP** to continue training it or **DOWN** to restart from the heuristic table.
+3. For each of the 100 episodes (100 steps each): reset the direction to the start configuration (`settings.reset_direction()`), clear the Lost timer, then per step:
+   - if the IR sensor sees an obstacle, run the obstacle reflex (no Q-update), clear the timers, and continue;
+   - read the state, choose an action epsilon-greedily, execute it, wait `DEFAULT_STEP_TIME_MS` (20 ms), read the next state;
+   - reward = rule reward + progress bonus, then the Bellman update.
+4. Epsilon is multiplied by 0.97 after every episode.
+5. At the end a save menu appears: **UP** default path, **RIGHT** date-stamped file, **DOWN** discard. Then you can continue (same table or a new one) or stop.
 
-### RULE D: Non-RL Obstacle Reflex
-- `hardcoded_obstacle_avoidance(robot)` handles IR obstacle avoidance with a 180° turnaround reflex.
+Metrics go to `training_metrics_cw_8state.csv`: episode, hard corrections (sharp turns), lap completed (no Lost state in the episode), total reward.
+
+## 7. Evaluation (`evaluate.py`)
+
+1. Pick a Q-table from `models/` (browse, select, or delete).
+2. Calibrate the sensor (or skip and load `models/calibration.json`).
+3. Reset the direction to the start configuration, set epsilon to 0, and loop: obstacle check, read intensity, pick the best action, execute, wait `DEFAULT_STEP_TIME_MS` (20 ms).
+
+There is no learning and no random action. If the Q-table cannot be loaded, the agent evaluates with the heuristic table.
+
+## 8. Obstacle Reflex (non-RL)
+
+`hardcoded_obstacle_avoidance(robot)` runs when the IR distance is below `OBSTACLE_DISTANCE_THRESHOLD`:
+1. Back away, then pivot ~180 degrees (`TURN_180_SPEED`, `TURN_180_MS`).
+2. Flip the travel direction (CW <-> CCW); the followed edge (OUTER/INNER) stays the same.
+3. `reacquire_edge()` finds OUR edge of the strip. It reads the intensity before moving, then moves in small steps (`EDGE_SEARCH_STEP_MS`, 40 ms) and reads again after each one. The two edges are mirror images, so the direction of the change identifies them: moving toward the expected white side the reading rises at the correct edge, and moving away from it the reading falls. The robot stops the moment it sees the expected change.
+   - Already on the edge band: probe toward white for up to `EDGE_PROBE_MS`. A reading that reaches the white threshold confirms the correct edge. A reading that falls means the opposite edge, so it searches across the strip.
+   - Otherwise: search toward white (`EDGE_SEARCH_TOWARD_MS`), then back the other way (`EDGE_SEARCH_AWAY_MS`).
+4. If nothing is found, an expanding spiral search runs, then `reacquire_edge()` runs again to confirm the identity.
+5. Control returns to the agent with the mirrored left/right mapping in effect and a cleared Lost timer.
+
+## 9. Calibration
+
+`calibrate_color_sensor()` measures white, black and edge (10-sample averages), derives all state thresholds from them (edge deadband = max(3, 12% of the white-black range); white and black sides each split into thirds; , writes them into `settings` in memory, and saves them to `models/calibration.json`. Skipping, abnormal readings, or simulator mode load the saved JSON instead.

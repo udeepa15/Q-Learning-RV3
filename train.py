@@ -251,70 +251,59 @@ def train_agent(num_episodes=None, max_steps_per_episode=None, save_path=None,
     lost_state_id = STATE_TOTALLY_LOST
 
     for episode in range(1, num_episodes + 1):
+        settings.reset_direction()
         env.reset()
         episode_reward = 0.0
         hard_corrections = 0
         fatal_off_track = False
 
         for step in range(1, max_steps_per_episode + 1):
-            # RULE D: Non-RL Reflex Interrupt for Obstacle Avoidance
             if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
-                print("[Train] Episode {}, Step {}: IR sensor triggered (<20cm). Skipping Q-update.".format(episode, step))
+                print("[Train] Episode {}, Step {}: IR sensor triggered. Skipping Q-update.".format(episode, step))
                 hardcoded_obstacle_avoidance(robot)
-                continue  # Skip Q-update for this step
+                env.reset()
+                continue
 
-            # 1. Observe current state
             intensity = robot.read_intensity()
             state = env.get_state(intensity)
 
             if state == lost_state_id:
                 fatal_off_track = True
 
-            # 2. Select action via Epsilon-Greedy policy
             action = agent.choose_action(state, epsilon)
 
-            # Track hard corrections (Action 3: Sharp LFT, Action 6: Sharp RGT)
             if action == settings.ACTION_SHARP_LEFT or action == settings.ACTION_SHARP_RIGHT:
                 hard_corrections += 1
 
-            # 3. Execute action
             robot.execute_action(action)
             wait(settings.DEFAULT_STEP_TIME_MS)
 
-            # 4. Observe next state and calculate reward
             next_intensity = robot.read_intensity()
             next_state = env.get_state(next_intensity)
 
             if next_state == lost_state_id:
                 fatal_off_track = True
 
-            reward = env.calculate_reward(state, action)
+            reward = env.calculate_reward(state, action) + env.progress_reward(state, next_state)
             episode_reward += reward
 
-            # 5. Q-table Bellman update
             agent.update(state, action, reward, next_state)
 
-        # Decay exploration rate after each episode
         epsilon = max(settings.EPSILON_MIN, epsilon * settings.EPSILON_DECAY)
 
-        # Lap completed if agent completes max_steps without triggering fatal off-track penalty
         lap_completed = not fatal_off_track
 
-        # Append episode metrics: [episode_number, hard_corrections, lap_completed, total_reward]
         metrics_log.append([episode, hard_corrections, lap_completed, episode_reward])
 
         print("Episode {:2d}/{} completed | Corrections: {:2d} | Lap Completed: {} | Reward: {:6.1f} | Epsilon: {:.4f}".format(
             episode, num_episodes, hard_corrections, lap_completed, episode_reward, epsilon))
 
-        # Dynamic Q-table snapshot display after each episode
         agent.display_q_table()
 
     robot.stop()
 
-    # Prompt user to save to default path, date-stamped path, or discard
     prompt_save_q_table(agent, save_path, robot)
 
-    # Write metrics to CSV (MicroPython compatible file writer)
     csv_filename = "training_metrics_cw_8state.csv"
 
     try:

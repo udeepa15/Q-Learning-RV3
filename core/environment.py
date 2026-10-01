@@ -17,27 +17,56 @@ STATE_HEAVY_DRIFT_BLACK  = 5
 STATE_PURE_BLACK         = 6
 STATE_TOTALLY_LOST       = 7
 
+try:
+    from pybricks.tools import StopWatch
+except ImportError:
+    import time
+
+    class StopWatch:
+        def __init__(self):
+            self._start = time.time()
+
+        def time(self):
+            return int((time.time() - self._start) * 1000)
+
+
+_clock = StopWatch()
+
+
+_REWARDS = {
+    STATE_PERFECT_EDGE: ({settings.ACTION_FORWARD: 5.0}, 1.0),
+    STATE_LIGHT_DRIFT_WHITE: ({settings.ACTION_MICRO_LEFT: 3.5, settings.ACTION_SLIGHT_LEFT: 1.5, settings.ACTION_SHARP_LEFT: -1.0}, -1.0),
+    STATE_MEDIUM_DRIFT_WHITE: ({settings.ACTION_MICRO_LEFT: 1.0, settings.ACTION_SLIGHT_LEFT: 3.0, settings.ACTION_SHARP_LEFT: 1.5}, -1.0),
+    STATE_PURE_WHITE: ({settings.ACTION_SLIGHT_LEFT: 2.0, settings.ACTION_SHARP_LEFT: 3.0}, -3.0),
+    STATE_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 3.5, settings.ACTION_SLIGHT_RIGHT: 1.5, settings.ACTION_SHARP_RIGHT: -1.0}, -1.0),
+    STATE_HEAVY_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 1.0, settings.ACTION_SLIGHT_RIGHT: 3.0, settings.ACTION_SHARP_RIGHT: 1.5}, -1.0),
+    STATE_PURE_BLACK: ({settings.ACTION_SLIGHT_RIGHT: 2.0, settings.ACTION_SHARP_RIGHT: 3.0}, -3.0),
+    STATE_TOTALLY_LOST: ({settings.ACTION_REVERSE: 5.0}, -5.0),
+}
+
 
 class Environment:
     """
     Manages state representation discretizer and Q-learning reward system for 8-State Architecture.
     """
     def __init__(self):
-        self.consecutive_lost_count = 0
+        self.pure_black_since = None
 
     def get_state(self, intensity):
         """
         Maps continuous color sensor intensity into 6 discrete color gradient states
         (3 white-side + 3 black-side, symmetric around the edge) + Edge + Lost.
+        Lost is reported once the reading has stayed in Pure Black for LOST_TIME_MS.
         Uses a wide Edge Deadband (PERFECT_EDGE_LOW_8 <= intensity < PERFECT_EDGE_HIGH_8) to prevent waddling.
         """
-        if intensity < settings.TOTALLY_LOST_THRESHOLD:
-            self.consecutive_lost_count += 1
+        if intensity < settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
+            now = _clock.time()
+            if self.pure_black_since is None:
+                self.pure_black_since = now
+            if now - self.pure_black_since >= settings.LOST_TIME_MS:
+                return STATE_TOTALLY_LOST
         else:
-            self.consecutive_lost_count = 0
-
-        if self.consecutive_lost_count >= settings.TOTALLY_LOST_CONSECUTIVE_STEPS:
-            return STATE_TOTALLY_LOST
+            self.pure_black_since = None
 
         if intensity >= settings.PURE_WHITE_THRESHOLD_8:
             return STATE_PURE_WHITE
@@ -46,7 +75,7 @@ class Environment:
         elif intensity >= settings.PERFECT_EDGE_HIGH_8:
             return STATE_LIGHT_DRIFT_WHITE
         elif intensity >= settings.PERFECT_EDGE_LOW_8:
-            return STATE_PERFECT_EDGE  # Edge Deadband Range (8 - 14)
+            return STATE_PERFECT_EDGE
         elif intensity >= settings.DRIFT_BLACK_THRESHOLD_8:
             return STATE_DRIFT_BLACK
         elif intensity >= settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
@@ -57,61 +86,34 @@ class Environment:
 
     def calculate_reward(self, state, action):
         """
-        Calculates RL reward for state-action pair in 8-State Mode.
-        White-side and black-side tiers are mirrored: the band nearest the
-        edge earns the highest reward for a mild correction, the middle band
-        for a moderate correction, and the far band for a hard correction.
+        Rule-based reward for a state-action pair. The size of the correction
+        should match how far off the edge the robot is: micro near the edge,
+        slight in the middle band, sharp far away. White-side and black-side
+        tiers are mirrored.
         """
-        if state == STATE_PERFECT_EDGE:
-            if action == settings.ACTION_FORWARD:
-                return 5.0
-            else:
-                return 1.0
-        elif state == STATE_LIGHT_DRIFT_WHITE:
-            if action == settings.ACTION_MICRO_LEFT or action == settings.ACTION_SLIGHT_LEFT or action == settings.ACTION_SHARP_LEFT:
-                return 3.5
-            else:
-                return -1.0
-        elif state == STATE_MEDIUM_DRIFT_WHITE:
-            if action == settings.ACTION_SLIGHT_LEFT or action == settings.ACTION_SHARP_LEFT:
-                return 3.0
-            else:
-                return -1.0
-        elif state == STATE_PURE_WHITE:
-            if action == settings.ACTION_SHARP_LEFT or action == settings.ACTION_SLIGHT_LEFT:
-                return 3.0
-            else:
-                return -3.0
-        elif state == STATE_DRIFT_BLACK:
-            if action == settings.ACTION_MICRO_RIGHT or action == settings.ACTION_SLIGHT_RIGHT or action == settings.ACTION_SHARP_RIGHT:
-                return 3.5
-            else:
-                return -1.0
-        elif state == STATE_HEAVY_DRIFT_BLACK:
-            if action == settings.ACTION_SLIGHT_RIGHT or action == settings.ACTION_SHARP_RIGHT:
-                return 3.0
-            else:
-                return -1.0
+        table, default = _REWARDS.get(state, ({}, 0.0))
+        return table.get(action, default)
 
-        elif state == STATE_PURE_BLACK:
-            if action == settings.ACTION_SHARP_RIGHT or action == settings.ACTION_SLIGHT_RIGHT:
-                return 3.0
-            else:
-                return -3.0
-        elif state == STATE_TOTALLY_LOST:
-            if action == settings.ACTION_REVERSE:
-                return 5.0
-            else:
-                return -5.0
-        else:
-            return 0.0
+    def progress_reward(self, state, next_state):
+        """
+        Outcome-based shaping: rewards moving toward the edge and penalises
+        drifting away, so Q-values reflect what an action actually did.
+        """
+        def distance(s):
+            return 4 if s == STATE_TOTALLY_LOST else abs(s - STATE_PERFECT_EDGE)
 
+        delta = distance(state) - distance(next_state)
+        if delta > 0:
+            return settings.PROGRESS_REWARD
+        if delta < 0:
+            return -settings.PROGRESS_REWARD
+        return 0.0
 
     def reset(self):
         """
-        Resets lost step counters for a new episode.
+        Clears the Pure Black timer (new episode, or after a reflex that moved the robot).
         """
-        self.consecutive_lost_count = 0
+        self.pure_black_since = None
 
 
 
