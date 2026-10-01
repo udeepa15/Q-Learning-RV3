@@ -176,8 +176,8 @@ def save_calibration(filepath="models/calibration.json"):
         "PERFECT_EDGE_LOW_8": settings.PERFECT_EDGE_LOW_8,
         "MEDIUM_DRIFT_WHITE_THRESH_8": settings.MEDIUM_DRIFT_WHITE_THRESH_8,
         "PURE_WHITE_THRESHOLD_8": settings.PURE_WHITE_THRESHOLD_8,
-        "DRIFT_BLACK_THRESHOLD_8": settings.DRIFT_BLACK_THRESHOLD_8,
-        "HEAVY_DRIFT_BLACK_THRESHOLD_8": settings.HEAVY_DRIFT_BLACK_THRESHOLD_8
+        "LIGHT_DRIFT_BLACK_THRESH_8": settings.LIGHT_DRIFT_BLACK_THRESH_8,
+        "MEDIUM_DRIFT_BLACK_THRESH_8": settings.MEDIUM_DRIFT_BLACK_THRESH_8
     }
 
     try:
@@ -201,7 +201,10 @@ def load_calibration(filepath="models/calibration.json"):
         with open(filepath, 'r') as f:
             cal_data = json.load(f)
 
+        old_names = {"DRIFT_BLACK_THRESHOLD_8": "LIGHT_DRIFT_BLACK_THRESH_8",
+                     "HEAVY_DRIFT_BLACK_THRESHOLD_8": "MEDIUM_DRIFT_BLACK_THRESH_8"}
         for key, val in cal_data.items():
+            key = old_names.get(key, key)
             if hasattr(settings, key):
                 setattr(settings, key, val)
 
@@ -298,15 +301,15 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     lower_span = settings.PERFECT_EDGE_LOW_8 - black_val
 
     # White side and black side are each split into thirds (Light/Medium/Pure and
-    # Drift/Heavy Drift/Pure), symmetric around the edge, so a deeper drift on
+    # Light/Medium Drift/Pure), symmetric around the edge, so a deeper drift on
     # either side earns a proportionally stronger turn.
     step_w = upper_span / 3.0
     settings.MEDIUM_DRIFT_WHITE_THRESH_8 = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 1)
     settings.PURE_WHITE_THRESHOLD_8      = int(settings.PERFECT_EDGE_HIGH_8 + step_w * 2)
 
     step_b = lower_span / 3.0
-    settings.DRIFT_BLACK_THRESHOLD_8       = int(settings.PERFECT_EDGE_LOW_8 - step_b * 1)
-    settings.HEAVY_DRIFT_BLACK_THRESHOLD_8 = int(settings.PERFECT_EDGE_LOW_8 - step_b * 2)
+    settings.LIGHT_DRIFT_BLACK_THRESH_8  = int(settings.PERFECT_EDGE_LOW_8 - step_b * 1)
+    settings.MEDIUM_DRIFT_BLACK_THRESH_8 = int(settings.PERFECT_EDGE_LOW_8 - step_b * 2)
 
     save_calibration()
 
@@ -323,9 +326,9 @@ def calibrate_color_sensor(robot, start_label="TRAINING"):
     print("   -> State 1 (Medium Drift)    : {} <= Intensity < {}".format(settings.MEDIUM_DRIFT_WHITE_THRESH_8, settings.PURE_WHITE_THRESHOLD_8))
     print("   -> State 2 (Light Drift)     : {} <= Intensity < {}".format(settings.PERFECT_EDGE_HIGH_8, settings.MEDIUM_DRIFT_WHITE_THRESH_8))
     print("   -> State 3 (PERFECT EDGE)    : {} <= Intensity < {} [FORWARD DEADBAND]".format(settings.PERFECT_EDGE_LOW_8, settings.PERFECT_EDGE_HIGH_8))
-    print("   -> State 4 (Drift Black)     : {} <= Intensity < {}".format(settings.DRIFT_BLACK_THRESHOLD_8, settings.PERFECT_EDGE_LOW_8))
-    print("   -> State 5 (Heavy Drift Blk) : {} <= Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8, settings.DRIFT_BLACK_THRESHOLD_8))
-    print("   -> State 6 (Pure Black)      : Intensity < {}".format(settings.HEAVY_DRIFT_BLACK_THRESHOLD_8))
+    print("   -> State 4 (Light Drift Black): {} <= Intensity < {}".format(settings.LIGHT_DRIFT_BLACK_THRESH_8, settings.PERFECT_EDGE_LOW_8))
+    print("   -> State 5 (Med Drift Black) : {} <= Intensity < {}".format(settings.MEDIUM_DRIFT_BLACK_THRESH_8, settings.LIGHT_DRIFT_BLACK_THRESH_8))
+    print("   -> State 6 (Pure Black)      : Intensity < {}".format(settings.MEDIUM_DRIFT_BLACK_THRESH_8))
     print("   -> State 7 (Totally Lost)    : Pure Black for {} ms".format(settings.LOST_TIME_MS))
     print("==================================================")
     print(" -> PRESS CENTER BUTTON TO CONFIRM & START {}".format(start_label))

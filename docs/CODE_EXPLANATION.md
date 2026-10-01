@@ -38,8 +38,8 @@ Thresholds are **overwritten by calibration** at the start of every training/eva
 | 1 | Medium Drift White | 17 - 20 |
 | 2 | Light Drift White | 14 - 17 |
 | 3 | Perfect Edge (deadband) | 8 - 14 |
-| 4 | Drift Black | 6 - 8 |
-| 5 | Heavy Drift Black | 4 - 6 |
+| 4 | Light Drift Black | 6 - 8 |
+| 5 | Medium Drift Black | 4 - 6 |
 | 6 | Pure Black | < 4 |
 | 7 | Totally Lost | Pure Black continuously for `LOST_TIME_MS` (2000 ms) |
 

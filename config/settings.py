@@ -21,12 +21,12 @@ BLACK_INTENSITY = 2.5   # Simulator / calibration record only
 EDGE_INTENSITY = 11.1
 
 PURE_WHITE_THRESHOLD_8       = 20  # State 0: Pure White (>= 20)
-MEDIUM_DRIFT_WHITE_THRESH_8  = 17  # State 1: Medium Drift (17 <= Intensity < 20)
-                                   # State 2: Light Drift (14 <= Intensity < 17)
+MEDIUM_DRIFT_WHITE_THRESH_8  = 17  # State 1: Medium Drift White (17 <= Intensity < 20)
+                                   # State 2: Light Drift White (14 <= Intensity < 17)
 PERFECT_EDGE_HIGH_8          = 14  # State 3: Edge High Bound
 PERFECT_EDGE_LOW_8           = 8   # State 3: Edge Low Bound -> Deadband (8 <= Intensity < 14)
-DRIFT_BLACK_THRESHOLD_8      = 6   # State 4: Drift Black (6 <= Intensity < 8)
-HEAVY_DRIFT_BLACK_THRESHOLD_8 = 4  # State 5: Heavy Drift Black (4 <= Intensity < 6)
+LIGHT_DRIFT_BLACK_THRESH_8   = 6   # State 4: Light Drift Black (6 <= Intensity < 8)
+MEDIUM_DRIFT_BLACK_THRESH_8  = 4   # State 5: Medium Drift Black (4 <= Intensity < 6)
                                    # State 6: Pure Black (< 4)
 
 
@@ -137,8 +137,8 @@ EDGE_SEARCH_AWAY_MS   = 3200   # search time back across the strip
 
 # PHASED TRAINING (Straight Line -> Turns)
 # Each phase trains its own states (rows) using every action.
-STRAIGHT_STATES = (2, 3, 4)     # Light Drift White, Edge, Drift Black
-TURN_STATES     = (0, 1, 5, 6, 7)  # Pure White, Medium Drift White, Heavy Drift Black, Pure Black, Lost
+STRAIGHT_STATES = (2, 3, 4)     # Light Drift White, Edge, Light Drift Black
+TURN_STATES     = (0, 1, 5, 6, 7)  # Pure White, Medium Drift White, Medium Drift Black, Pure Black, Lost
 
 STRAIGHT_EPISODE_MS = 4000
 TURN_EPISODE_MS     = 5000

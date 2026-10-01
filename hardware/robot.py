@@ -106,7 +106,7 @@ class RobotInterface:
             elif action_id in (settings.ACTION_SLIGHT_RIGHT, settings.ACTION_SHARP_RIGHT):
                 self.sim_intensity = min(100, self.sim_intensity + 5)
             elif action_id == settings.ACTION_REVERSE:
-                if self.sim_intensity < settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
+                if self.sim_intensity < settings.MEDIUM_DRIFT_BLACK_THRESH_8:
                     self.sim_intensity = settings.BLACK_INTENSITY + 2
 
     def stop(self):

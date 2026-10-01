@@ -74,7 +74,7 @@ class QLearningAgent:
         action_names = ["FWD", "M_LFT", "S_LFT", "SH_LFT", "M_RGT", "S_RGT", "SH_RGT", "REV"]
         state_names = [
             "Pure White  ", "Med Drift W ", "Lt Drift W  ",
-            "Edge        ", "Drift Black ", "Heavy DriftB", "Pure Black  ", "Lost/IR     "
+            "Edge        ", "Lt Drift B  ", "Med Drift B ", "Pure Black  ", "Lost/IR     "
         ]
 
 

@@ -12,8 +12,8 @@ STATE_PURE_WHITE         = 0
 STATE_MEDIUM_DRIFT_WHITE = 1
 STATE_LIGHT_DRIFT_WHITE  = 2
 STATE_PERFECT_EDGE       = 3
-STATE_DRIFT_BLACK        = 4
-STATE_HEAVY_DRIFT_BLACK  = 5
+STATE_LIGHT_DRIFT_BLACK  = 4
+STATE_MEDIUM_DRIFT_BLACK = 5
 STATE_PURE_BLACK         = 6
 STATE_TOTALLY_LOST       = 7
 
@@ -38,8 +38,8 @@ _REWARDS = {
     STATE_LIGHT_DRIFT_WHITE: ({settings.ACTION_MICRO_LEFT: 3.5, settings.ACTION_SLIGHT_LEFT: 1.5, settings.ACTION_SHARP_LEFT: -1.0}, -1.0),
     STATE_MEDIUM_DRIFT_WHITE: ({settings.ACTION_MICRO_LEFT: 1.0, settings.ACTION_SLIGHT_LEFT: 3.0, settings.ACTION_SHARP_LEFT: 1.5}, -1.0),
     STATE_PURE_WHITE: ({settings.ACTION_SLIGHT_LEFT: 2.0, settings.ACTION_SHARP_LEFT: 3.0}, -3.0),
-    STATE_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 3.5, settings.ACTION_SLIGHT_RIGHT: 1.5, settings.ACTION_SHARP_RIGHT: -1.0}, -1.0),
-    STATE_HEAVY_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 1.0, settings.ACTION_SLIGHT_RIGHT: 3.0, settings.ACTION_SHARP_RIGHT: 1.5}, -1.0),
+    STATE_LIGHT_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 3.5, settings.ACTION_SLIGHT_RIGHT: 1.5, settings.ACTION_SHARP_RIGHT: -1.0}, -1.0),
+    STATE_MEDIUM_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 1.0, settings.ACTION_SLIGHT_RIGHT: 3.0, settings.ACTION_SHARP_RIGHT: 1.5}, -1.0),
     STATE_PURE_BLACK: ({settings.ACTION_SLIGHT_RIGHT: 2.0, settings.ACTION_SHARP_RIGHT: 3.0}, -3.0),
     STATE_TOTALLY_LOST: ({settings.ACTION_REVERSE: 5.0}, -5.0),
 }
@@ -52,7 +52,7 @@ class Environment:
 
     def get_state(self, intensity):
         """Turn a light reading into one of the 8 states."""
-        if intensity < settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
+        if intensity < settings.MEDIUM_DRIFT_BLACK_THRESH_8:
             now = _clock.time()
             if self.pure_black_since is None:
                 self.pure_black_since = now
@@ -69,10 +69,10 @@ class Environment:
             return STATE_LIGHT_DRIFT_WHITE
         elif intensity >= settings.PERFECT_EDGE_LOW_8:
             return STATE_PERFECT_EDGE
-        elif intensity >= settings.DRIFT_BLACK_THRESHOLD_8:
-            return STATE_DRIFT_BLACK
-        elif intensity >= settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
-            return STATE_HEAVY_DRIFT_BLACK
+        elif intensity >= settings.LIGHT_DRIFT_BLACK_THRESH_8:
+            return STATE_LIGHT_DRIFT_BLACK
+        elif intensity >= settings.MEDIUM_DRIFT_BLACK_THRESH_8:
+            return STATE_MEDIUM_DRIFT_BLACK
         else:
             return STATE_PURE_BLACK
 

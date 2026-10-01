@@ -34,7 +34,7 @@ from hardware.robot import RobotInterface
 from hardware.reflexes import calibrate_color_sensor
 from core.agent import QLearningAgent
 from core.environment import (Environment, STATE_PERFECT_EDGE, STATE_LIGHT_DRIFT_WHITE,
-                              STATE_DRIFT_BLACK, STATE_TOTALLY_LOST)
+                              STATE_LIGHT_DRIFT_BLACK, STATE_TOTALLY_LOST)
 
 PHASE_STRAIGHT = "STRAIGHT"
 PHASE_TURN = "TURN"
@@ -149,7 +149,7 @@ def fallback_action(agent, state, phase):
     if phase == PHASE_STRAIGHT:
         if state == STATE_TOTALLY_LOST:
             return settings.ACTION_REVERSE
-        proxy = STATE_LIGHT_DRIFT_WHITE if state < STATE_PERFECT_EDGE else STATE_DRIFT_BLACK
+        proxy = STATE_LIGHT_DRIFT_WHITE if state < STATE_PERFECT_EDGE else STATE_LIGHT_DRIFT_BLACK
         return agent.choose_action(proxy, 0.0)
     return agent.choose_action(state, 0.0)
 
