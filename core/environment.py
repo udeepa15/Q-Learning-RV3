@@ -33,6 +33,18 @@ except ImportError:
 _clock = StopWatch()
 
 
+_REWARDS = {
+    STATE_PERFECT_EDGE: ({settings.ACTION_FORWARD: 5.0}, 1.0),
+    STATE_LIGHT_DRIFT_WHITE: ({settings.ACTION_MICRO_LEFT: 3.5, settings.ACTION_SLIGHT_LEFT: 1.5, settings.ACTION_SHARP_LEFT: -1.0}, -1.0),
+    STATE_MEDIUM_DRIFT_WHITE: ({settings.ACTION_MICRO_LEFT: 1.0, settings.ACTION_SLIGHT_LEFT: 3.0, settings.ACTION_SHARP_LEFT: 1.5}, -1.0),
+    STATE_PURE_WHITE: ({settings.ACTION_SLIGHT_LEFT: 2.0, settings.ACTION_SHARP_LEFT: 3.0}, -3.0),
+    STATE_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 3.5, settings.ACTION_SLIGHT_RIGHT: 1.5, settings.ACTION_SHARP_RIGHT: -1.0}, -1.0),
+    STATE_HEAVY_DRIFT_BLACK: ({settings.ACTION_MICRO_RIGHT: 1.0, settings.ACTION_SLIGHT_RIGHT: 3.0, settings.ACTION_SHARP_RIGHT: 1.5}, -1.0),
+    STATE_PURE_BLACK: ({settings.ACTION_SLIGHT_RIGHT: 2.0, settings.ACTION_SHARP_RIGHT: 3.0}, -3.0),
+    STATE_TOTALLY_LOST: ({settings.ACTION_REVERSE: 5.0}, -5.0),
+}
+
+
 class Environment:
     """
     Manages state representation discretizer and Q-learning reward system for 8-State Architecture.
@@ -74,55 +86,13 @@ class Environment:
 
     def calculate_reward(self, state, action):
         """
-        Calculates RL reward for state-action pair in 8-State Mode.
-        White-side and black-side tiers are mirrored: the band nearest the
-        edge earns the highest reward for a mild correction, the middle band
-        for a moderate correction, and the far band for a hard correction.
+        Rule-based reward for a state-action pair. The size of the correction
+        should match how far off the edge the robot is: micro near the edge,
+        slight in the middle band, sharp far away. White-side and black-side
+        tiers are mirrored.
         """
-        if state == STATE_PERFECT_EDGE:
-            if action == settings.ACTION_FORWARD:
-                return 5.0
-            else:
-                return 1.0
-        elif state == STATE_LIGHT_DRIFT_WHITE:
-            if action == settings.ACTION_MICRO_LEFT or action == settings.ACTION_SLIGHT_LEFT or action == settings.ACTION_SHARP_LEFT:
-                return 3.5
-            else:
-                return -1.0
-        elif state == STATE_MEDIUM_DRIFT_WHITE:
-            if action == settings.ACTION_SLIGHT_LEFT or action == settings.ACTION_SHARP_LEFT:
-                return 3.0
-            else:
-                return -1.0
-        elif state == STATE_PURE_WHITE:
-            if action == settings.ACTION_SHARP_LEFT or action == settings.ACTION_SLIGHT_LEFT:
-                return 3.0
-            else:
-                return -3.0
-        elif state == STATE_DRIFT_BLACK:
-            if action == settings.ACTION_MICRO_RIGHT or action == settings.ACTION_SLIGHT_RIGHT or action == settings.ACTION_SHARP_RIGHT:
-                return 3.5
-            else:
-                return -1.0
-        elif state == STATE_HEAVY_DRIFT_BLACK:
-            if action == settings.ACTION_SLIGHT_RIGHT or action == settings.ACTION_SHARP_RIGHT:
-                return 3.0
-            else:
-                return -1.0
-
-        elif state == STATE_PURE_BLACK:
-            if action == settings.ACTION_SHARP_RIGHT or action == settings.ACTION_SLIGHT_RIGHT:
-                return 3.0
-            else:
-                return -3.0
-        elif state == STATE_TOTALLY_LOST:
-            if action == settings.ACTION_REVERSE:
-                return 5.0
-            else:
-                return -5.0
-        else:
-            return 0.0
-
+        table, default = _REWARDS.get(state, ({}, 0.0))
+        return table.get(action, default)
 
     def progress_reward(self, state, next_state):
         """

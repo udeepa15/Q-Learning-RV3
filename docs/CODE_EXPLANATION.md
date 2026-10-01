@@ -62,18 +62,17 @@ Speeds are (left, right) in deg/s with `BASE_SPEED = 300`, for `CW` direction on
 
 Per learning step: `reward = calculate_reward(s, a) + progress_reward(s, s')`.
 
-**Rule-based** (`Environment.calculate_reward`):
+**Rule-based** (`Environment.calculate_reward`, table `_REWARDS` in `core/environment.py`). The size of the correction matches how far off the edge the robot is: micro near the edge, slight in the middle band, sharp far away. Black-side rows mirror the white-side rows with right actions.
 
-| State | Rewarded actions | Reward | Otherwise |
-|---|---|---|---|
-| 3 Edge | Forward | +5 | +1 |
-| 2 Light Drift White | any left | +3.5 | -1 |
-| 1 Medium Drift White | slight / sharp left | +3 | -1 |
-| 0 Pure White | slight / sharp left | +3 | -3 |
-| 4 Drift Black | any right | +3.5 | -1 |
-| 5 Heavy Drift Black | slight / sharp right | +3 | -1 |
-| 6 Pure Black | slight / sharp right | +3 | -3 |
-| 7 Lost | Reverse | +5 | -5 |
+| State | Micro left | Slight left | Sharp left | Other actions |
+|---|---|---|---|---|
+| 3 Edge | +1 | +1 | +1 | Forward +5, rest +1 |
+| 2 Light Drift White | +3.5 | +1.5 | -1 | -1 |
+| 1 Medium Drift White | +1 | +3 | +1.5 | -1 |
+| 0 Pure White | -3 | +2 | +3 | -3 |
+| 7 Lost | | | | Reverse +5, rest -5 |
+
+States 4, 5 and 6 use the same values with micro, slight and sharp **right**.
 
 **Progress shaping** (`Environment.progress_reward`): distance from the edge is `|state - 3|` (Lost counts as 4). `+PROGRESS_REWARD` (1.0) if the next state is closer, `-1.0` if farther, `0` if unchanged.
 
@@ -83,13 +82,13 @@ Training is split into two phases of short, time-limited episodes; only the (row
 
 | Phase | Episode length | States updated | Actions used |
 |---|---|---|---|
-| Straight | 4 s | 2, 3, 4 | forward, slight left, slight right |
-| Turn | 5 s | 0, 1, 5, 6, 7 | micro/sharp left, micro/sharp right, reverse |
+| Straight | 4 s | 2, 3, 4 (near the edge) | forward, micro left, micro right |
+| Turn | 5 s | 0, 1, 5, 6, 7 | slight left/right, sharp left/right, reverse |
 
 Per step inside an episode:
 1. If the IR sensor sees an obstacle, run the obstacle reflex (no Q-update) and continue.
 2. If the state belongs to the phase: epsilon-greedy over the phase's actions. Otherwise use `fallback_action` (no update, counted as an off-phase step).
-3. Execute the action, wait `TRAIN_STEP_TIME_MS` (20 ms), read the next state.
+3. Execute the action, wait `TRAIN_STEP_TIME_MS` (20 ms, same as evaluation), read the next state.
 4. For learning steps, compute the reward and update the Q-table.
 
 Epsilon starts at `PHASE_EPSILON_START` (0.4) and is multiplied by `PHASE_EPSILON_DECAY` (0.85) after each kept episode, down to `PHASE_EPSILON_MIN` (0.05). After each episode you choose: next episode, redo (the snapshot is restored), or save and finish the phase.
@@ -100,7 +99,7 @@ The straight phase is saved to `models/straight_q_table_8state.pkl` so you can r
 
 1. Pick a Q-table from `models/` (browse, select, or delete).
 2. Calibrate the sensor (or skip and load `models/calibration.json`).
-3. Loop with epsilon = 0: obstacle check, read intensity, pick the best action, execute, wait `DEFAULT_STEP_TIME_MS` (3 ms).
+3. Loop with epsilon = 0: obstacle check, read intensity, pick the best action, execute, wait `DEFAULT_STEP_TIME_MS` (20 ms).
 4. If the table is phased (every non-zero cell lies in its row's trained columns), each state only uses its trained columns. Loading failure aborts the run.
 
 ## 8. Obstacle Reflex (non-RL)

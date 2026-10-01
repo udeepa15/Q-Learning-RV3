@@ -39,7 +39,7 @@ This document outlines key physical robot calibration steps, hardware considerat
 
 3. **Sensor Sampling Delays**:
    - Sensor read commands (`color_sensor.reflection()`, `ir_sensor.distance()`) take $\sim 5 - 10\text{ms}$ on I2C/analog EV3 buses.
-   - Avoid zero-delay loops (`while True: pass`). Always include a small wait interval (`DEFAULT_STEP_TIME_MS` = 3 ms in evaluation, `TRAIN_STEP_TIME_MS` = 20 ms in training) between RL iterations.
+   - Avoid zero-delay loops (`while True: pass`). Always include a small wait interval (`DEFAULT_STEP_TIME_MS` = `TRAIN_STEP_TIME_MS` = 20 ms in both training and evaluation) between RL iterations.
 
 ---
 
