@@ -24,9 +24,9 @@ Q-table: 8 states x 8 actions, initialised to **all zeros**. After each learning
 Q(s,a) <- Q(s,a) + alpha * [ r + gamma * max_a' Q(s',a') - Q(s,a) ]
 ```
 
-The max over `a'` only considers the columns allowed for `s'` (see phased training). Hyperparameters are `PHASE_ALPHA = 0.3` and `PHASE_GAMMA = 0.6`, which are also the agent's constructor defaults.
+The max over `a'` is taken over all 8 actions of the next state. Hyperparameters are `PHASE_ALPHA = 0.3` and `PHASE_GAMMA = 0.6`, which are also the agent's constructor defaults.
 
-`QLearningAgent` provides `choose_action(state, epsilon, allowed_actions=None)`, `update(...)`, `snapshot()` / `restore()` (used to discard an episode), `save()`, `load()` and `display_q_table()`.
+`QLearningAgent` provides `choose_action(state, epsilon)`, `update(...)`, `snapshot()` / `restore()` (used to discard an episode), `save()`, `load()` and `display_q_table()`.
 
 ## 3. States (8)
 
@@ -78,18 +78,19 @@ States 4, 5 and 6 use the same values with micro, slight and sharp **right**.
 
 ## 6. Phased Training (`train.py`)
 
-Training is split into two phases of short, time-limited episodes; only the (row, column) cells owned by the current phase are updated.
+Training is split into two phases of short, time-limited episodes. Each phase owns some states (rows) and trains them with **every action**; only the rows owned by the current phase are updated.
 
-| Phase | Episode length | States updated | Actions used |
+| Phase | Episode length | States updated (rows) | Actions |
 |---|---|---|---|
-| Straight | 4 s | 2, 3, 4 (near the edge) | forward, micro left, micro right |
-| Turn | 5 s | 0, 1, 5, 6, 7 | slight left/right, sharp left/right, reverse |
+| Straight | 4 s | 2, 3, 4 (near the edge) | all 8 |
+| Turn | 5 s | 0, 1, 5, 6, 7 (far off or lost) | all 8 |
 
 Per step inside an episode:
-1. If the IR sensor sees an obstacle, run the obstacle reflex (no Q-update) and continue.
-2. If the state belongs to the phase: epsilon-greedy over the phase's actions. Otherwise use `fallback_action` (no update, counted as an off-phase step).
-3. Execute the action, wait `TRAIN_STEP_TIME_MS` (20 ms, same as evaluation), read the next state.
-4. For learning steps, compute the reward and update the Q-table.
+1. If the state belongs to the phase: epsilon-greedy over all actions. Otherwise use `fallback_action` (no update, counted as an off-phase step).
+2. Execute the action, wait `TRAIN_STEP_TIME_MS` (20 ms, same as evaluation), read the next state.
+3. For learning steps, compute the reward and update the Q-table.
+
+The obstacle reflex is not active during training, so an episode is never interrupted. It still runs during evaluation.
 
 Epsilon starts at `PHASE_EPSILON_START` (0.4) and is multiplied by `PHASE_EPSILON_DECAY` (0.85) after each kept episode, down to `PHASE_EPSILON_MIN` (0.05). After each episode you choose: next episode, redo (the snapshot is restored), or save and finish the phase.
 
@@ -100,7 +101,7 @@ The straight phase is saved to `models/straight_q_table_8state.pkl` so you can r
 1. Pick a Q-table from `models/` (browse, select, or delete).
 2. Calibrate the sensor (or skip and load `models/calibration.json`).
 3. Loop with epsilon = 0: obstacle check, read intensity, pick the best action, execute, wait `DEFAULT_STEP_TIME_MS` (20 ms).
-4. If the table is phased (every non-zero cell lies in its row's trained columns), each state only uses its trained columns. Loading failure aborts the run.
+4. Loading failure aborts the run.
 
 ## 8. Obstacle Reflex (non-RL)
 

@@ -1,14 +1,5 @@
 #!/usr/bin/env pybricks-micropython
-"""
-Phased Training Script for EV3 Q-Learning Line Follower Agent.
-
-The Q-table starts from all zeros and is trained in two phases:
-  1. STRAIGHT (~4s episodes): rows Light Drift White / Edge / Drift Black,
-     columns FWD / Slight LFT / Slight RGT.
-  2. TURN (~5s episodes): the remaining rows and columns.
-Each episode is started with the CENTER button; afterwards the user keeps or
-discards the episode's updates and either runs another episode or finishes the phase.
-"""
+"""Phased training for the Q-learning line follower."""
 
 import sys
 import os
@@ -40,7 +31,7 @@ except ImportError:
 
 from config import settings
 from hardware.robot import RobotInterface
-from hardware.reflexes import hardcoded_obstacle_avoidance, calibrate_color_sensor
+from hardware.reflexes import calibrate_color_sensor
 from core.agent import QLearningAgent
 from core.environment import (Environment, STATE_PERFECT_EDGE, STATE_LIGHT_DRIFT_WHITE,
                               STATE_DRIFT_BLACK, STATE_TOTALLY_LOST)
@@ -49,13 +40,13 @@ PHASE_STRAIGHT = "STRAIGHT"
 PHASE_TURN = "TURN"
 
 PHASES = {
-    PHASE_STRAIGHT: (settings.STRAIGHT_STATES, settings.STRAIGHT_ACTIONS, settings.STRAIGHT_EPISODE_MS),
-    PHASE_TURN: (settings.TURN_STATES, settings.TURN_ACTIONS, settings.TURN_EPISODE_MS),
+    PHASE_STRAIGHT: (settings.STRAIGHT_STATES, settings.STRAIGHT_EPISODE_MS),
+    PHASE_TURN: (settings.TURN_STATES, settings.TURN_EPISODE_MS),
 }
 
 
 def file_exists(filename):
-    """MicroPython safe file existence check."""
+    """Check if a file exists."""
     try:
         os.stat(filename)
         return True
@@ -74,10 +65,7 @@ def ensure_parent_dir(path):
 
 
 def generate_dated_filename(base_path):
-    """
-    Generates a filename with current date and time stamp.
-    e.g., models/cw_q_table_8state.pkl -> models/cw_q_table_8state_2026-08-07_09-24.pkl
-    """
+    """Add the date and time to a file name."""
     import time
     t = time.localtime()
     date_str = "{:04d}-{:02d}-{:02d}_{:02d}-{:02d}".format(t[0], t[1], t[2], t[3], t[4])
@@ -100,12 +88,7 @@ def has_ev3_buttons(robot):
 
 
 def wait_for_choice(robot, title, options):
-    """
-    Shows a menu and blocks until one option is chosen.
-    options: list of (button_name, key_char, result, label).
-    Uses EV3 buttons on hardware, terminal input in simulator mode.
-    The first option is the terminal default.
-    """
+    """Show a menu and wait for a button (or a typed answer on a PC)."""
     print("\n==================================================")
     print(" " + title)
     print("==================================================")
@@ -141,12 +124,7 @@ def wait_for_choice(robot, title, options):
 
 
 def prompt_save_q_table(agent, save_path, robot):
-    """
-    Prompts user at the end of training to:
-      1. Save Q-table to default path
-      2. Save Q-table with current date-time stamp in models directory
-      3. Discard Q-table (do not save)
-    """
+    """Ask where to save the table, or discard it."""
     dated_path = generate_dated_filename(save_path)
 
     chosen_action = wait_for_choice(robot, "TRAINING FINISHED: SAVE MENU", [
@@ -167,25 +145,18 @@ def prompt_save_q_table(agent, save_path, robot):
 
 
 def fallback_action(agent, state, phase):
-    """
-    Action for rows the current phase does not train (no Q-update is made).
-    STRAIGHT: turn rows are still untrained, so steer with the nearest straight row.
-    TURN: straight rows use their already-trained straight policy.
-    """
+    """Action used in rows this phase does not train."""
     if phase == PHASE_STRAIGHT:
         if state == STATE_TOTALLY_LOST:
             return settings.ACTION_REVERSE
         proxy = STATE_LIGHT_DRIFT_WHITE if state < STATE_PERFECT_EDGE else STATE_DRIFT_BLACK
-        return agent.choose_action(proxy, 0.0, settings.STRAIGHT_ACTIONS)
-    return agent.choose_action(state, 0.0, settings.STRAIGHT_ACTIONS)
+        return agent.choose_action(proxy, 0.0)
+    return agent.choose_action(state, 0.0)
 
 
 def run_episode(robot, env, agent, phase, epsilon):
-    """
-    Runs one time-limited episode. Only (row, column) pairs owned by the phase are updated.
-    Returns (updates, total_reward, off_phase_steps, lost_steps).
-    """
-    phase_states, phase_actions, duration_ms = PHASES[phase]
+    """Run one timed episode, updating only the cells this phase owns."""
+    phase_states, duration_ms = PHASES[phase]
 
     settings.reset_direction()
     env.reset()
@@ -198,16 +169,9 @@ def run_episode(robot, env, agent, phase, epsilon):
     watch = StopWatch()
 
     while watch.time() < duration_ms:
-        if robot.read_ir() < settings.OBSTACLE_DISTANCE_THRESHOLD:
-            print("[Train] IR sensor triggered. Running obstacle reflex (no Q-update).")
-            hardcoded_obstacle_avoidance(robot)
-            env.reset()
-            state = env.get_state(robot.read_intensity())
-            continue
-
         learning = state in phase_states
         if learning:
-            action = agent.choose_action(state, epsilon, phase_actions)
+            action = agent.choose_action(state, epsilon)
         else:
             action = fallback_action(agent, state, phase)
             off_phase_steps += 1
@@ -221,7 +185,7 @@ def run_episode(robot, env, agent, phase, epsilon):
 
         if learning:
             reward = env.calculate_reward(state, action) + env.progress_reward(state, next_state)
-            agent.update(state, action, reward, next_state, settings.actions_for_state(next_state))
+            agent.update(state, action, reward, next_state)
             total_reward += reward
             updates += 1
 
@@ -232,10 +196,8 @@ def run_episode(robot, env, agent, phase, epsilon):
 
 
 def run_phase(robot, env, agent, phase, metrics_log):
-    """
-    Interactive episode loop for one phase. Returns when the user chooses to save & finish.
-    """
-    duration_s = PHASES[phase][2] / 1000.0
+    """Run episodes for one phase until the user saves."""
+    duration_s = PHASES[phase][1] / 1000.0
     epsilon = settings.PHASE_EPSILON_START
     episode = 0
 
@@ -254,7 +216,6 @@ def run_phase(robot, env, agent, phase, metrics_log):
 
         print("[Train] {} episode {} | Updates: {} | Reward: {:.1f} | Off-phase steps: {} | Lost steps: {}".format(
             phase, episode, updates, total_reward, off_phase, lost))
-        agent.display_q_table()
 
         choice = wait_for_choice(robot, "{} episode {} finished".format(phase, episode), [
             ("UP", "1", 'next', "Keep updates, run NEXT episode"),
@@ -312,7 +273,6 @@ def train_agent(save_path="models/cw_q_table_8state.pkl", use_simulator=False):
     print("[Train] alpha={} gamma={} | Q-table start: {}".format(
         settings.PHASE_ALPHA, settings.PHASE_GAMMA,
         "all zeros" if start_phase == PHASE_STRAIGHT else checkpoint))
-    agent.display_q_table()
 
     try:
         if start_phase == PHASE_STRAIGHT:

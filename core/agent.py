@@ -17,9 +17,7 @@ except ImportError:
 
 
 class QLearningAgent:
-    """
-    Q-Learning Agent implemented in pure Python (no numpy dependency).
-    """
+    """Tabular Q-learning agent in plain Python."""
     def __init__(self, n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS,
                  alpha=settings.PHASE_ALPHA, gamma=settings.PHASE_GAMMA):
         self.n_states = n_states
@@ -35,60 +33,32 @@ class QLearningAgent:
     def restore(self, snapshot):
         self.q_table = [row[:] for row in snapshot]
 
-    def choose_action(self, state, epsilon, allowed_actions=None):
-        """
-        Epsilon-greedy action selection, optionally restricted to a subset of columns.
-        """
-        if allowed_actions is None:
-            allowed_actions = range(self.n_actions)
-        allowed_actions = list(allowed_actions)
-
+    def choose_action(self, state, epsilon):
+        """Pick an action: random with chance epsilon, otherwise the best one."""
         if random.random() < epsilon:
-            return random.choice(allowed_actions)
+            return random.randrange(self.n_actions)
 
         q_row = self.q_table[state]
-        max_q = q_row[allowed_actions[0]]
-        best_actions = [allowed_actions[0]]
-
-        for action in allowed_actions[1:]:
-            if q_row[action] > max_q:
-                max_q = q_row[action]
-                best_actions = [action]
-            elif q_row[action] == max_q:
-                best_actions.append(action)
-
+        max_q = max(q_row)
+        best_actions = [a for a in range(self.n_actions) if q_row[a] == max_q]
         return random.choice(best_actions)
 
-    def update(self, state, action, reward, next_state, next_actions=None):
-        """
-        Updates Q-value using Bellman Equation:
-        Q(s, a) = Q(s, a) + alpha * [reward + gamma * max_a' Q(s', a') - Q(s, a)]
-        The max over a' can be restricted to next_actions.
-        """
-        next_row = self.q_table[next_state]
-        if next_actions is None:
-            max_next_q = max(next_row)
-        else:
-            max_next_q = max(next_row[a] for a in next_actions)
+    def update(self, state, action, reward, next_state):
+        """Bellman update for one step."""
+        max_next_q = max(self.q_table[next_state])
         current_q = self.q_table[state][action]
         new_q = current_q + self.alpha * (reward + self.gamma * max_next_q - current_q)
         self.q_table[state][action] = new_q
         return new_q
 
     def save(self, filepath):
-        """
-        Saves the Q-table to a pickle file.
-        """
+        """Save the Q-table to a file."""
         with open(filepath, 'wb') as f:
             pickle.dump(self.q_table, f)
         print("[QLearningAgent] Q-table successfully saved to {}".format(filepath))
 
     def load(self, filepath):
-        """
-        Loads the Q-table from a pickle file.
-        Rejects tables whose shape does not match this agent's state/action space
-        (e.g. model files from an older state/action layout).
-        """
+        """Load a Q-table and reject one with the wrong shape."""
         with open(filepath, 'rb') as f:
             q_table = pickle.load(f)
 
@@ -100,10 +70,7 @@ class QLearningAgent:
         print("[QLearningAgent] Q-table successfully loaded from {}".format(filepath))
 
     def display_q_table(self):
-        """
-        Prints a dynamic, formatted ASCII snapshot of the Q-table in the terminal.
-        Asterisk (*) indicates the current optimal action per state.
-        """
+        """Print the Q-table and mark the best action in each row."""
         action_names = ["FWD", "M_LFT", "S_LFT", "SH_LFT", "M_RGT", "S_RGT", "SH_RGT", "REV"]
         state_names = [
             "Pure White  ", "Med Drift W ", "Lt Drift W  ",

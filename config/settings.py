@@ -89,13 +89,7 @@ ACTION_SPEEDS = {
 
 
 def set_direction(direction, edge=None):
-    """
-    Rebuilds the action -> motor speed mapping for the given travel
-    direction ("CW"/"CCW") and followed strip edge ("OUTER"/"INNER").
-    The same Q-table drives every combination: whenever white sits on the
-    robot's left instead of its right, the speed tuples are mirrored so a
-    logical 'left' action physically turns right.
-    """
+    """Mirrors the left/right wheel speeds for the given direction and edge."""
     global TURN_DIRECTION, INVERT_TURNS, LINE_EDGE
     TURN_DIRECTION = direction
     if edge is not None:
@@ -124,7 +118,7 @@ def set_direction(direction, edge=None):
 
 
 def reset_direction():
-    """Restores the start configuration (used at the start of every episode / evaluation run)."""
+    """Puts the direction and edge back to the start setup."""
     set_direction(START_DIRECTION, START_EDGE)
 
 
@@ -142,13 +136,9 @@ EDGE_SEARCH_AWAY_MS   = 3200   # search time back across the strip
 
 
 # PHASED TRAINING (Straight Line -> Turns)
-# Correction size matches how far off the edge the robot is: micro near the edge, slight/sharp further out.
-STRAIGHT_STATES  = (2, 3, 4)   # Light Drift White, Edge, Drift Black
-STRAIGHT_ACTIONS = (ACTION_FORWARD, ACTION_MICRO_LEFT, ACTION_MICRO_RIGHT)
-
-TURN_STATES  = (0, 1, 5, 6, 7)  # Pure White, Medium Drift White, Heavy Drift Black, Pure Black, Lost
-TURN_ACTIONS = (ACTION_SLIGHT_LEFT, ACTION_SHARP_LEFT, ACTION_SLIGHT_RIGHT,
-                ACTION_SHARP_RIGHT, ACTION_REVERSE)
+# Each phase trains its own states (rows) using every action.
+STRAIGHT_STATES = (2, 3, 4)     # Light Drift White, Edge, Drift Black
+TURN_STATES     = (0, 1, 5, 6, 7)  # Pure White, Medium Drift White, Heavy Drift Black, Pure Black, Lost
 
 STRAIGHT_EPISODE_MS = 4000
 TURN_EPISODE_MS     = 5000
@@ -161,11 +151,6 @@ PHASE_EPSILON_MIN   = 0.05
 PROGRESS_REWARD     = 1.0   # +/- bonus when the next reading moves toward/away from the edge
 
 STRAIGHT_CHECKPOINT_PATH = "models/straight_q_table_8state.pkl"
-
-
-def actions_for_state(state):
-    """Columns a row is allowed to use under phased training."""
-    return STRAIGHT_ACTIONS if state in STRAIGHT_STATES else TURN_ACTIONS
 
 
 # Non-RL Reflex / Hardware Parameters

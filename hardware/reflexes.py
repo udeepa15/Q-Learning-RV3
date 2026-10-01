@@ -1,6 +1,4 @@
-"""
-Hardcoded Reflex Behaviors: Obstacle Avoidance and Track Direction Detection.
-"""
+"""Obstacle reflex, edge search and sensor calibration."""
 
 try:
     from pybricks.tools import wait
@@ -16,19 +14,13 @@ except ImportError:
 
 
 def is_on_edge(intensity):
-    """
-    Helper function to check if reflection intensity is within the perfect edge gradient range.
-    """
+    """True if the reading is in the edge band."""
     return settings.PERFECT_EDGE_LOW_8 <= intensity < settings.PERFECT_EDGE_HIGH_8
 
 
 
 def _spin_toward_white():
-    """
-    Spin tuple (left_speed, right_speed) that pans the sensor toward the
-    side where WHITE is expected for the current (direction, edge) config:
-    white on the right when INVERT_TURNS is False, on the left when True.
-    """
+    """Wheel speeds that turn the sensor toward the white side."""
     if not settings.INVERT_TURNS:
         return (100, -100)
     return (-100, 100)
@@ -42,14 +34,7 @@ def _avg_intensity(robot, samples=3):
 
 
 def reacquire_edge(robot):
-    """
-    Finds OUR edge of the 5cm strip after a turnaround. The strip's two edges
-    are mirror images, so the direction of the intensity change identifies them:
-    moving toward the expected WHITE side the reading rises at the correct edge;
-    moving away from it the reading falls at the correct edge.
-    The intensity is read before moving and after every small step, and the robot
-    stops as soon as the expected change is seen.
-    """
+    """Find our own edge again after the U-turn by watching how the reading changes."""
     step = settings.EDGE_SEARCH_STEP_MS
     mid = (settings.PERFECT_EDGE_LOW_8 + settings.PERFECT_EDGE_HIGH_8) / 2.0
     toward = _spin_toward_white()
@@ -97,12 +82,7 @@ def reacquire_edge(robot):
 
 
 def spiral_search_for_edge(robot, max_steps=45):
-    """
-    Expanding Archimedean spiral search routine to re-acquire the track edge
-    when initial left/right sweeps fail to locate the white strip.
-    Gradually increases inner wheel speed relative to outer wheel speed
-    so the robot drives in an expanding spiral arc, checking intensity at each step.
-    """
+    """Drive in a widening spiral until the edge shows up."""
     print("[Reflex] Initial sweeps failed. Starting expanding spiral search recovery...")
     
     outer_speed = 200
@@ -136,14 +116,7 @@ def spiral_search_for_edge(robot, max_steps=45):
 
 
 def hardcoded_obstacle_avoidance(robot):
-    """
-    RULE D: Hardcoded non-RL obstacle avoidance reflex.
-    Called when IR sensor reads distance below threshold.
-    Backs away, pivots 180 degrees, flips the travel direction mapping
-    (LINE_EDGE stays the same -- we return along the SAME physical edge),
-    re-acquires the track edge, verifies it is not the strip's opposite
-    edge, then returns control to the RL agent travelling the other way.
-    """
+    """Back up, turn about 180 degrees and find the edge again."""
     print("[Reflex] Obstacle detected! Turning 180 degrees to go back.")
     robot.stop()
     wait(100)
@@ -180,9 +153,7 @@ def hardcoded_obstacle_avoidance(robot):
  
 
 def save_calibration(filepath="models/calibration.json"):
-    """
-    Saves current color sensor intensity thresholds to JSON file.
-    """
+    """Save the thresholds to a JSON file."""
     import os
     try:
         import json
@@ -220,9 +191,7 @@ def save_calibration(filepath="models/calibration.json"):
 
 
 def load_calibration(filepath="models/calibration.json"):
-    """
-    Loads saved color sensor intensity thresholds from JSON file into settings.
-    """
+    """Load the saved thresholds."""
     try:
         import json
     except ImportError:
@@ -244,13 +213,7 @@ def load_calibration(filepath="models/calibration.json"):
 
 
 def calibrate_color_sensor(robot, start_label="TRAINING"):
-    """
-    Interactive color sensor calibration routine on EV3 brick:
-      1. Pure White surface
-      2. Pure Black surface
-      3. Perfect Edge boundary
-    Derives the 8-state intensity thresholds from the measured values and saves them.
-    """
+    """Measure white, black and the edge, then set the thresholds."""
     if robot.is_simulated or not hasattr(robot, 'ev3') or robot.ev3 is None:
         print("[Calibration] Simulator mode detected. Skipping interactive calibration.")
         load_calibration()

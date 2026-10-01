@@ -46,19 +46,12 @@ _REWARDS = {
 
 
 class Environment:
-    """
-    Manages state representation discretizer and Q-learning reward system for 8-State Architecture.
-    """
+    """Turns sensor readings into states and hands out rewards."""
     def __init__(self):
         self.pure_black_since = None
 
     def get_state(self, intensity):
-        """
-        Maps continuous color sensor intensity into 6 discrete color gradient states
-        (3 white-side + 3 black-side, symmetric around the edge) + Edge + Lost.
-        Lost is reported once the reading has stayed in Pure Black for LOST_TIME_MS.
-        Uses a wide Edge Deadband (PERFECT_EDGE_LOW_8 <= intensity < PERFECT_EDGE_HIGH_8) to prevent waddling.
-        """
+        """Turn a light reading into one of the 8 states."""
         if intensity < settings.HEAVY_DRIFT_BLACK_THRESHOLD_8:
             now = _clock.time()
             if self.pure_black_since is None:
@@ -85,20 +78,12 @@ class Environment:
 
 
     def calculate_reward(self, state, action):
-        """
-        Rule-based reward for a state-action pair. The size of the correction
-        should match how far off the edge the robot is: micro near the edge,
-        slight in the middle band, sharp far away. White-side and black-side
-        tiers are mirrored.
-        """
+        """Reward for taking this action in this state."""
         table, default = _REWARDS.get(state, ({}, 0.0))
         return table.get(action, default)
 
     def progress_reward(self, state, next_state):
-        """
-        Outcome-based shaping: rewards moving toward the edge and penalises
-        drifting away, so Q-values reflect what an action actually did.
-        """
+        """+1 if the robot got closer to the edge, -1 if it got farther."""
         def distance(s):
             return 4 if s == STATE_TOTALLY_LOST else abs(s - STATE_PERFECT_EDGE)
 
@@ -110,9 +95,7 @@ class Environment:
         return 0.0
 
     def reset(self):
-        """
-        Clears the Pure Black timer (new episode, or after a reflex that moved the robot).
-        """
+        """Clear the pure black timer."""
         self.pure_black_since = None
 
 

@@ -23,9 +23,7 @@ except ImportError:
 
 
 class RobotInterface:
-    """
-    Interface wrapper for Pybricks EV3 motors and sensors with PC simulator fallback.
-    """
+    """Motors and sensors, with a simulator on a PC."""
     def __init__(self, use_simulator=False):
         self.is_simulated = use_simulator or not IS_HARDWARE
 
@@ -76,26 +74,20 @@ class RobotInterface:
             print("[RobotInterface] Running in PC Simulator Mode.")
 
     def read_intensity(self):
-        """
-        Reads reflection intensity from the color sensor (0 - 100).
-        """
+        """Read the light sensor (0 to 100)."""
         if self.is_simulated or self.color_sensor is None:
             return self.sim_intensity
         return self.color_sensor.reflection()
 
     def read_ir(self):
-        """
-        Reads distance percentage / cm from the IR sensor.
-        """
+        """Read the IR distance."""
         if self.is_simulated or self.ir_sensor is None:
             return self.sim_ir_distance
         return self.ir_sensor.distance()
 
 
     def execute_action(self, action_id):
-        """
-        Executes an 8-action motor command.
-        """
+        """Run the motors for one action."""
         if action_id not in settings.ACTION_SPEEDS:
             raise ValueError("Invalid action_id: {}".format(action_id))
 
@@ -118,17 +110,13 @@ class RobotInterface:
                     self.sim_intensity = settings.BLACK_INTENSITY + 2
 
     def stop(self):
-        """
-        Stops both drive motors.
-        """
+        """Stop both motors."""
         if not self.is_simulated:
             self.left_motor.stop()
             self.right_motor.stop()
 
     def turn_direct(self, left_speed, right_speed, duration_ms):
-        """
-        Direct motor control helper for reflex behaviors.
-        """
+        """Set both motor speeds directly and wait."""
         if not self.is_simulated:
             self.left_motor.run(left_speed)
             self.right_motor.run(right_speed)

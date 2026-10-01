@@ -31,7 +31,7 @@ from core.environment import Environment
 
 
 def file_exists(filename):
-    """MicroPython safe file existence check."""
+    """Check if a file exists."""
     try:
         os.stat(filename)
         return True
@@ -40,9 +40,7 @@ def file_exists(filename):
 
 
 def list_saved_q_tables(models_dir="models"):
-    """
-    Lists saved Q-table .pkl files in models_dir, most recently modified first.
-    """
+    """List the saved Q-tables, newest first."""
     try:
         filenames = [f for f in os.listdir(models_dir) if f.endswith(".pkl")]
     except Exception:
@@ -57,7 +55,7 @@ def list_saved_q_tables(models_dir="models"):
 
 
 def delete_q_table(path):
-    """MicroPython safe file delete."""
+    """Delete a file."""
     try:
         os.remove(path)
         print("[Evaluate] Deleted Q-table: {}".format(path))
@@ -68,15 +66,7 @@ def delete_q_table(path):
 
 
 def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
-    """
-    Prompts the user to pick which saved Q-table to load for evaluation, with
-    the option to clean up (delete) old/unwanted tables from the list first.
-      - UP/DOWN Buttons : Browse saved Q-tables (most recent first)
-      - CENTER Button   : Select the highlighted Q-table
-      - LEFT Button     : Delete the highlighted Q-table (press twice to confirm)
-    Supports EV3 brick button menu and terminal input fallback for simulator mode.
-    Returns the chosen file path, or default_path if none are found/left.
-    """
+    """Let the user pick which saved Q-table to run."""
     candidates = list_saved_q_tables()
     if not candidates:
         print("[Evaluate] No saved Q-tables found in models/. Falling back to {}.".format(default_path))
@@ -197,18 +187,8 @@ def select_q_table(robot, default_path="models/cw_q_table_8state.pkl"):
             return candidates[0]
 
 
-def is_phased_table(q_table):
-    """True if every non-zero cell lies in the columns its row owns under phased training."""
-    for state, row in enumerate(q_table):
-        allowed = settings.actions_for_state(state)
-        for action, q_val in enumerate(row):
-            if q_val != 0.0 and action not in allowed:
-                return False
-    return True
-
-
 def wait_for_start(robot):
-    """Blocks until CENTER is pressed (Enter in simulator mode) so the robot can be placed first."""
+    """Wait for CENTER so the robot can be placed first."""
     print("\n==================================================")
     print(" Place robot on the line -> Press CENTER to START EVALUATION")
     print("==================================================\n")
@@ -230,9 +210,7 @@ def wait_for_start(robot):
 
 
 def evaluate_agent(max_iterations=None, use_simulator=False):
-    """
-    Evaluation loop executing pure Q-table exploitation with track direction detection.
-    """
+    """Run the saved Q-table with no learning."""
     robot = RobotInterface(use_simulator=use_simulator)
 
     agent = QLearningAgent(n_states=settings.NUM_STATES, n_actions=settings.NUM_ACTIONS)
@@ -257,10 +235,6 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
     if not calibrate_color_sensor(robot, start_label="EVALUATION"):
         wait_for_start(robot)
 
-    phased = is_phased_table(agent.q_table)
-    if phased:
-        print("[Evaluate] Phased Q-table detected: each row only uses the columns it was trained on.")
-
     settings.reset_direction()
     epsilon = 0.0
     print("[Evaluate] Epsilon set to 0.0 (Pure Exploitation Mode).")
@@ -283,8 +257,7 @@ def evaluate_agent(max_iterations=None, use_simulator=False):
 
             state = env.get_state(intensity)
 
-            allowed = settings.actions_for_state(state) if phased else None
-            action = agent.choose_action(state, epsilon, allowed)
+            action = agent.choose_action(state, epsilon)
 
             robot.execute_action(action)
             wait(settings.DEFAULT_STEP_TIME_MS)
